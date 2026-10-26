@@ -1,0 +1,84 @@
+# Build dinput.dll from source, run the host tests, package the zip.
+# A tag v<version> also creates a draft GitHub release with the zip and SHA256SUMS.
+# Third-party actions are pinned by commit SHA (tag in the comment).
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Cache toolchain
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tools_build
+          # the toolchain version and SHA-256 live only in fetch_tools.sh; editing it refreshes the cache
+          key: toolchain-${{ hashFiles('tools/fetch_tools.sh') }}
+
+      - name: Fetch toolchain (pinned, SHA-256 checked)
+        run: tools/fetch_tools.sh
+
+      - name: Version
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            ver=${GITHUB_REF_NAME#v}
+            grep -qF "\"ghostfix $ver on Thief2MP" mod/src/main.c \
+              || { echo "::error::tag $GITHUB_REF_NAME but mod/src/main.c logs another version"; exit 1; }
+          else
+            ver=$(grep -oP '"ghostfix \K[0-9.]+(?= on Thief2MP)' mod/src/main.c)-dev+${GITHUB_SHA::7}
+          fi
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: tools/build.sh
+
+      - name: Tests
+        run: |
+          make -C mod test
+          python3 -I tools/qa/test_analyze.py
+
+      - name: Package
+        run: |
+          tools/package.sh "${{ steps.ver.outputs.ver }}"
+          cd dist
+          sha256sum "thief2-ghostfix-${{ steps.ver.outputs.ver }}.zip" > SHA256SUMS
+          (cd ../mod/build && sha256sum dinput.dll) | sed 's| dinput.dll$| ghostfix/dinput.dll|' >> SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: thief2-ghostfix-${{ steps.ver.outputs.ver }}
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --draft --generate-notes --title "ghostfix ${GITHUB_REF_NAME#v}"

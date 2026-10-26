@@ -78,6 +78,14 @@ tools/build.sh              # -> mod/build/dinput.dll
 tools/package.sh 0.1        # -> dist/thief2-ghostfix-0.1.zip
 ```
 
+The build is reproducible: the same source gives a byte-identical `dinput.dll` (no PE timestamp), so you
+can rebuild a release and compare its hash with `SHA256SUMS`. The zip itself is not byte-identical (file times).
+
+Releases are built by GitHub Actions (`.github/workflows/build.yml`) from source: every push and pull request
+builds, tests and uploads the zip as a run artifact. To release, bump the version in `mod/src/main.c`
+(`ghostfix <version> on Thief2MP`), then `git tag v<version> && git push origin v<version>`. The workflow
+creates a draft release with the zip and `SHA256SUMS`; check it and publish it.
+
 ## Tests
 
 - `make -C mod test`: interpolation unit tests (host gcc).

@@ -8,7 +8,7 @@ SRC     = src/main.c src/proxy.c src/interp.c src/qa.c
 
 build/dinput.dll: $(SRC) $(MH) src/common.h src/engine.h src/interp.h src/dinput.def
 	mkdir -p build
-	$(CC) $(CFLAGS) -shared -o $@ $(SRC) $(MH) src/dinput.def -s -static
+	$(CC) $(CFLAGS) -shared -o $@ $(SRC) $(MH) src/dinput.def -s -static -Wl,--no-insert-timestamp
 
 build/test_interp: tests/test_interp.c src/interp.c src/interp.h
 	mkdir -p build
