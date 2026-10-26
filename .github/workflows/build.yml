@@ -1,5 +1,6 @@
 # Build dinput.dll from source, run the host tests, package the zip.
-# A tag v<version> also creates a draft GitHub release with the zip and SHA256SUMS.
+# A tag v<version> also creates a draft GitHub release with the zip; its description is
+# .github/release-notes.md plus the SHA-256 hashes.
 # Third-party actions are pinned by commit SHA (tag in the comment).
 name: build
 
@@ -48,20 +49,33 @@ jobs:
           make -C mod test
           python3 -I tools/qa/test_analyze.py
 
-      - name: Package
+      - name: Package and release notes
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
         run: |
-          tools/package.sh "${{ steps.ver.outputs.ver }}"
-          cd dist
-          sha256sum "thief2-ghostfix-${{ steps.ver.outputs.ver }}.zip" > SHA256SUMS
-          (cd ../mod/build && sha256sum dinput.dll) | sed 's| dinput.dll$| ghostfix/dinput.dll|' >> SHA256SUMS
-          cat SHA256SUMS
+          tools/package.sh "$VER"
+          # .github/release-notes.md + the SHA-256 of the zip and of the DLL and ini inside it
+          {
+            sed -e "s|@VERSION@|$VER|g" -e "s|@REPO@|$GITHUB_REPOSITORY|g" .github/release-notes.md
+            echo
+            echo '## SHA-256'
+            echo
+            echo '```'
+            (cd dist && sha256sum "thief2-ghostfix-$VER.zip")
+            (cd mod/build && sha256sum dinput.dll) | sed 's| dinput.dll$| ghostfix/dinput.dll|'
+            (cd mod && sha256sum ghostfix.ini) | sed 's| ghostfix.ini$| ghostfix/ghostfix.ini|'
+            echo '```'
+            echo
+            echo '`dinput.dll` is a reproducible build: rebuild this tag with `tools/build.sh` and compare.'
+          } > dist/RELEASE_NOTES.md
+          cat dist/RELEASE_NOTES.md
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: thief2-ghostfix-${{ steps.ver.outputs.ver }}
           path: |
             dist/*.zip
-            dist/SHA256SUMS
+            dist/RELEASE_NOTES.md
           if-no-files-found: error
 
   release:
@@ -80,5 +94,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS \
-            --repo "$GITHUB_REPOSITORY" --draft --generate-notes --title "ghostfix ${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --notes-file dist/RELEASE_NOTES.md \
+            --repo "$GITHUB_REPOSITORY" --draft --title "ghostfix ${GITHUB_REF_NAME#v}"
