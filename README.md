@@ -105,6 +105,10 @@ tools/package.sh 0.1        # -> dist/thief2-ghostfix-0.1.zip
 | `tools/win/` | PowerShell helpers for window placement and screenshots |
 | `tools/re/` | PE, minidump and command-table helpers |
 
+## License
+
+MIT, see [LICENSE](LICENSE). `mod/third_party/minhook` keeps its own BSD-2-Clause license.
+
 ## Credits
 
 - NewDark team for the 1.29 multiplayer beta; Figgis (systemshock.org topic 12190) for the player-cap finding.
