@@ -1,0 +1,16 @@
+ghostfix for Thief II multiplayer (NewDark 1.29) - smooth, correctly placed remote players
+=========================================================================================
+
+Everyone in the session installs it (a player without it is shown the stock way).
+
+1. Install Thief 2 + NewDark 1.29 + the multiplayer beta. Easiest: T2Fix 1.29
+   (https://github.com/Xanfre/T2Fix/releases, T2Fix_1.29-2026-09-16.exe), and tick
+   "Thief 2 Multiplayer Beta" in the component list. Everyone must use the same version.
+2. Copy dinput.dll and ghostfix.ini from this folder into the game folder, next to Thief2MP.exe.
+3. Start Thief2MP.exe. The game folder gets a ghostfix.log; its first line should say
+   "ghostfix 0.1 on Thief2MP 1.29". If it doesn't appear, the exe is not the 1.29 MP exe.
+
+Also included: up to 4 players without the "4th player kicks two others" bug (max_players=4 in
+ghostfix.ini). Hosting and joining are unchanged (host port 5198, see the video guide).
+
+Uninstall: delete dinput.dll and ghostfix.ini. Single-player thief2.exe is not affected.

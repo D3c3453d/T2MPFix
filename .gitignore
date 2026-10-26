@@ -1,0 +1,12 @@
+# build output and downloaded tools
+mod/build/
+/dist/
+/tools_build
+__pycache__/
+
+# local only: game copies, NewDark downloads, decompiler output, QA results (never commit game files)
+/local/
+/downloads/
+/re/
+tools/qa/results/
+*.dmp

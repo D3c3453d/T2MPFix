@@ -1,0 +1,2 @@
+# The observing player stands still.
+0 mark idle

@@ -1,0 +1,37 @@
+# Movement routine for the moving player. "<ms since in-mission> <verb>", verbs: bind <binder cmd>, mark <text>, engine cmd.
+# Loops every 30 s. Covers: walk, run, turn while moving, strafe, jump while running, crouch-walk, stop/start.
+loop 30000
+0     mark walk
+0     bind forward 2
+2500  bind turn 1
+3200  bind turn 0
+5000  mark run
+5000  bind forward 4
+7000  mark jump
+7000  bind jump
+8000  bind jump
+9000  bind forward 0
+9000  mark strafe
+9000  bind sidestep 1
+11000 bind sidestep -1
+13000 bind sidestep 0
+13000 mark turn_run
+13000 bind forward 4
+13000 bind turn -1
+14500 bind turn 0
+16000 mark crouch
+16000 bind crouch
+16100 bind forward 2
+19000 bind crouch
+19100 mark stop
+19100 bind forward 0
+21000 mark back
+21000 bind forward -2
+23000 bind forward 0
+23000 bind turn 2
+24000 bind turn 0
+24000 mark circle
+24000 bind forward 2
+24000 bind turn 1
+28000 bind turn 0
+28000 bind forward 0
