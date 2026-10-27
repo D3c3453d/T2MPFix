@@ -24,6 +24,8 @@ extern uintptr_t g_base;
 #define A_PHYS_GET_MODEL     0x516c90  /* cPhysModel* __stdcall (int obj) */
 #define A_COMMAND_EXECUTE    0x41a940  /* char* (EAX = char* cmd): engine command line */
 #define A_OBJ_POS_UPDATE     0x559c30  /* void (ECX = float pos[3], EDX = obj, [stack] = short facing[3]) */
+#define A_NET_DAMAGE_FILTER  0x44bce0  /* int __stdcall (int victim, int culprit, sDamageMsg*, void*): MP damage
+                                          filter; returns 1 after zeroing the damage to veto it, 0 = no opinion */
 
 /* Globals */
 #define A_SIM_TIME_MS        0x9b3d50  /* uint32 sim time, ms */
@@ -33,6 +35,10 @@ extern uintptr_t g_base;
 #define A_NETMANAGER_VTABLE  0x7d5a3c  /* cNetManager vtable; slot 40 = SetMaxPlayers(this, n) __stdcall */
 #define NETMAN_SLOT_SETMAX   40
 #define NETMAN_MAXPLAYERS    0x136     /* field: join accepted while players < this */
+#define A_OBJ_NETWORKING     0xab83ac  /* IObjectNetworking*: vtable slots below, each BOOL __stdcall (this, obj) */
+#define OBJNET_IS_PROXY      0x1c      /* owned by another machine */
+#define OBJNET_HOSTED_HERE   0x20      /* owned by this machine */
+#define OBJNET_LOCAL_ONLY    0x24      /* NetworkCategory Local Only: every machine has its own copy */
 #define A_POSITION_TABLE     0xab9e60  /* -> {.., +0x18 Position*[obj], +0x20 count}; Position: vec +0, facing +0x10 */
 
 /* Signatures: first bytes at each hooked function, checked before hooking. */
@@ -42,6 +48,7 @@ extern uintptr_t g_base;
 #define SIG_SEND             "\x83\xec\x0c\x53\x8b\x5c\x24\x14\x66\xff\x43\x64"
 #define SIG_REMOTE_STEER     "\x83\xec\x24\x53\x55\x8b\x6c\x24\x30\x56\x8b\x75\x00"
 #define SIG_PHYS_GET_MODEL   "\x83\xec\x14\x53\x8b\x5c\x24\x1c\x56\x57\x53"
+#define SIG_NET_DAMAGE_FILTER "\x53\x55\x8b\x6c\x24\x14\x8b\x5d\x1c\x8b\xc5"
 #define SIG_OBJ_POS_UPDATE   "\xa1\x60\x9e\xab\x00\x56\x8b\x74\x24\x08\x3b\x50\x20"   /* absolute: compare rebased */
 
 /* cPhysModel */

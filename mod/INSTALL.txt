@@ -11,6 +11,7 @@ Everyone in the session installs it (a player without it is shown the stock way)
    "T2MPFix 0.1 on Thief2MP 1.29". If it doesn't appear, the exe is not the 1.29 MP exe.
 
 Also included: up to 4 players without the "4th player kicks two others" bug (max_players=4 in
-T2MPFix.ini). Hosting and joining are unchanged (host port 5198, see the video guide).
+T2MPFix.ini), and lava that hurts in multiplayer again (damage_fix=1). Hosting and joining are
+unchanged (host port 5198, see the video guide).
 
 Uninstall: delete dinput.dll and T2MPFix.ini. Single-player thief2.exe is not affected.

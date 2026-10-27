@@ -1,12 +1,12 @@
 # The release DLL is built by tools/build.sh (llvm-mingw in a container); this rule is the same command
-# for a host that has i686-w64-mingw32-clang on PATH. `make test` runs the interpolation tests with host gcc.
+# for a host that has i686-w64-mingw32-clang on PATH. `make test` runs the interpolation and damage-filter tests with host gcc.
 CC      = i686-w64-mingw32-clang
 CFLAGS  = -O2 -mstackrealign -Wall -Wextra -Wno-unused-parameter -Isrc -Ithird_party/minhook/include
 MH      = third_party/minhook/src/hook.c third_party/minhook/src/buffer.c third_party/minhook/src/trampoline.c \
           third_party/minhook/src/hde/hde32.c
 SRC     = src/main.c src/proxy.c src/interp.c src/qa.c
 
-build/dinput.dll: $(SRC) $(MH) src/common.h src/engine.h src/interp.h src/dinput.def
+build/dinput.dll: $(SRC) $(MH) src/common.h src/engine.h src/interp.h src/damage.h src/dinput.def
 	mkdir -p build
 	$(CC) $(CFLAGS) -shared -o $@ $(SRC) $(MH) src/dinput.def -s -static -Wl,--no-insert-timestamp
 
@@ -14,7 +14,12 @@ build/test_interp: tests/test_interp.c src/interp.c src/interp.h
 	mkdir -p build
 	gcc -O1 -Wall -Isrc -o $@ tests/test_interp.c src/interp.c -lm
 
-test: build/test_interp
+build/test_damage: tests/test_damage.c src/damage.h
+	mkdir -p build
+	gcc -O1 -Wall -Isrc -o $@ tests/test_damage.c
+
+test: build/test_interp build/test_damage
 	./build/test_interp
+	./build/test_damage
 
 .PHONY: test

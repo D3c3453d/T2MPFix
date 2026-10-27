@@ -110,6 +110,34 @@ shows the client's avatar on the ground at the telemetry position (tools/qa shot
   (`0x43a230`, stdcall). Stock lobby with 4 instances: Client3 joining kicked Client1 and Client2 (reproduced).
   With the cap set to 5: all 4 stay and play.
 
+## Lava does no damage in multiplayer (fixed by `damage_fix`)
+
+Observed: Soulforge (mission 15, `miss16`): the lava trough next to the start does nothing in `Thief2MP.exe`, kills in
+`thief2.exe`; the ladle (a physical object) hurts in both. Reproduced with all T2MPFix hooks off and `max_players=0`.
+
+Traced with a throwaway logging build, step by step (each step logged on the live game):
+- The lava is a water room whose cells carry flow group 2. Object 1739 (`Water Flow Group`, `FlowGroup` = 2) has
+  stim sources FireStim and WaterStim. On a medium change the physics media callback (`0x486d00`) calls the flow
+  propagator (`0xab9a70`, a `cPeriodicPropagator`), which links 1739 -> player and sends FireStim (intensity 14) now
+  and every 1000 ms. This all works in MP.
+- The player's receptrons: `M-GarrettDiffNormal` Amplify 0.8 (-> 11.2), then `FireDamaged` `damage` (effect 21,
+  handler `0x596fc0`), which calls `IDamageModel::DamageObject` (`0x5a4da0`) with victim = player, culprit = 1739,
+  amount 11-12.
+- `DamageObject` runs the damage filters (`0x5963f0`, array at model+0x20). Filter `0x44bce0` (MP only, `__stdcall`
+  (victim, culprit, msg, data)) zeroes the amount and returns 1, so `DamageObject` returns 1 ("status quo").
+- Its logic: allow if not networking or if the victim is local-only; if the culprit is hosted here and the victim
+  is a proxy, send the damage to the owner (`0x44c080`) and zero it locally; if the culprit is neither hosted here
+  nor a proxy, zero it unless it has `LocalCopy` (the out value of that property query reuses an argument slot, so
+  a missing property also blocks). Measured: player f1c 0 / f20 1 / f24 0, lava 1739 f1c 0 / f20 0 / f24 1
+  (`IObjectNetworking` at `0xab83ac`, slots +0x1c proxy, +0x20 hosted here, +0x24 local only).
+- Result: any damage whose culprit is a Local Only object is dropped on every machine. `dark_net.dml` makes
+  `physical` objects Hosted, which is why the ladle works.
+
+Fix: hook the filter; if the culprit is local-only and the victim is hosted here (not a proxy), return 0 (no
+opinion) and let the damage through. Each machine applies it to the objects it owns (its own player; AI on the
+host); proxies still go through the stock filter and stay blocked, so nothing is applied twice.
+Verified: host and client each die within ~2 s in the Soulforge lava; the other player keeps full health.
+
 ## Lessons (candidates for playbook/lessons.md)
 
 - `0x516c90` is `__stdcall` (`ret 4`) although Ghidra shows a plain one-argument function. Calling it as cdecl drifted
@@ -121,6 +149,9 @@ shows the client's avatar on the ground at the telemetry position (tools/qa shot
   is *not* the foreground window. For two instances on one desktop: subclass the window, swallow deactivation, send a
   synthetic activate, and keep both windows in the background. Mouse coordinates are in a space scaled 1.28 from the
   800x600 client (menus are 640x480-based).
+- When a stimulus "does nothing", log each hop (propagator -> sensor -> receptron -> effect -> damage model ->
+  filters) on the live game before reading more decompile: here the decompile of the stimulator had "unreachable"
+  blocks removed, and the real cause was a damage filter three layers further down.
 - A locked Windows session makes every visual or input test fail silently (D3D can't present); check `LogonUI` first.
 
 ## Unknowns
