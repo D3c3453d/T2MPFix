@@ -2,7 +2,7 @@
 
 Fixes the other players' avatars in Thief II multiplayer showing up in the wrong place: lagging
 behind, sticking on door frames and stairs, walking through walls, floating, or vanishing. Also
-fixes "the 4th player joining kicks two others".
+fixes "the 4th player joining kicks two others", and lava that doesn't hurt anyone in multiplayer.
 
 **Everyone in the session should install it.** It changes how often your own position is sent as
 well as how the others are shown. A player without it is still shown the stock way (no worse than
@@ -32,6 +32,7 @@ Uninstall: delete `dinput.dll` and `T2MPFix.ini`. Single-player `thief2.exe` is 
 | `send_interval_ms` | 50 | Send interval while moving |
 | `delay_min_ms` / `delay_max_ms` | 60 / 300 | Bounds for the display delay (it adapts to your connection's jitter) |
 | `max_players` | 4 | The host's player cap is set to N+1 (Figgis's finding), so 4 players can join. 0 = leave stock. Tested with all four players set to 4 |
+| `damage_fix` | 1 | Lava (and other damage from local-only objects) hurts players again. Stock multiplayer zeroes it on every machine; with this, each player's own game applies it to them. 0 = stock |
 | `telemetry` | 0 | Write `T2MPFix_tel.csv` for debugging |
 
 ## How it works
@@ -104,7 +105,8 @@ check it and publish it.
 
 | Path | What |
 |---|---|
-| `mod/src/main.c` | hooks (send decision, steer, heartbeat receive), config, player cap, bot |
+| `mod/src/main.c` | hooks (send decision, steer, heartbeat receive, damage filter), config, player cap, bot |
+| `mod/src/damage.h` | when local-only damage (lava) is let through (unit tested) |
 | `mod/src/interp.c` | snapshot buffer and interpolation (no engine dependencies, unit tested) |
 | `mod/src/engine.h` | Thief2MP 1.29 addresses, struct offsets, byte signatures checked at startup |
 | `mod/src/qa.c` | QA channel: injected mouse input, engine commands, window activation |

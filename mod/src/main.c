@@ -13,6 +13,8 @@
  *  - receive: buffer the received states and show the remote player on the interpolated path,
  *    a fixed small delay behind, by placing the avatar there every frame with the engine's own
  *    warp, instead of steering it through local physics.
+ *
+ * Also: damage from local-only objects (lava) is applied again; see damage.h.
  */
 #include <windows.h>
 #include <math.h>
@@ -22,6 +24,7 @@
 #include "MinHook.h"
 #include "engine.h"
 #include "interp.h"
+#include "damage.h"
 #include "common.h"
 
 uintptr_t g_base;
@@ -29,7 +32,7 @@ uintptr_t g_base;
 static struct {
     int send_fix, recv_fix, telemetry, send_interval_ms, qa, hooks;
     int net_delay_ms, net_jitter_ms, net_loss_pct, net_seed;   /* QA: impair incoming heartbeats */
-    int max_players;
+    int max_players, damage_fix;
     interp_cfg_t ic;
     char bot[MAX_PATH];
 } cfg;
@@ -38,7 +41,7 @@ static FILE *g_log;
 FILE *g_tel;
 static LARGE_INTEGER g_qpf;
 static int g_local_player;          /* obj id of our player (from the local ghost table) */
-static unsigned g_forced_sends, g_frames, g_fallbacks;
+static unsigned g_forced_sends, g_frames, g_fallbacks, g_local_damage;
 int qa_local_player(void) { return g_local_player; }
 
 /* ---------- utilities ---------- */
@@ -407,6 +410,26 @@ static void __cdecl hk_steer(uint8_t *rg, float dt)
     }
 }
 
+typedef int(__stdcall *damage_filter_t)(int victim, int culprit, void *msg, void *data);
+typedef int(__stdcall *objnet_pred_t)(void *self, int obj);
+static damage_filter_t o_damage_filter;
+
+static int objnet(void *on, int slot, int obj) { return ((objnet_pred_t)(*(void ***)on)[slot / 4])(on, obj); }
+
+/* The engine zeroes damage from local-only culprits (lava) for every victim; let it through for victims
+ * this machine hosts, and leave everything else to the engine. */
+static int __stdcall hk_damage_filter(int victim, int culprit, void *msg, void *data)
+{
+    void *on = *(void **)VA(A_OBJ_NETWORKING);
+    if (on && culprit && victim &&
+        local_damage_allowed(objnet(on, OBJNET_LOCAL_ONLY, culprit), objnet(on, OBJNET_IS_PROXY, victim),
+                             objnet(on, OBJNET_HOSTED_HERE, victim))) {
+        g_local_damage++;
+        return 0;
+    }
+    return o_damage_filter(victim, culprit, msg, data);
+}
+
 /* ---------- setup ---------- */
 
 static int sig_ok(uintptr_t va, const char *sig, size_t n)
@@ -439,8 +462,9 @@ static void load_config(const char *dir)
     cfg.ic.max_extrap_ms = GetPrivateProfileIntA("T2MPFix", "max_extrap_ms", 100, ini);
     cfg.ic.snap_dist = (float)GetPrivateProfileIntA("T2MPFix", "snap_dist", 20, ini);
     cfg.max_players = GetPrivateProfileIntA("T2MPFix", "max_players", 0, ini);
+    cfg.damage_fix = GetPrivateProfileIntA("T2MPFix", "damage_fix", 1, ini);
     cfg.qa = GetPrivateProfileIntA("qa", "enable", 0, ini);
-    cfg.hooks = GetPrivateProfileIntA("qa", "hooks", 15, ini);   /* bisecting aid */
+    cfg.hooks = GetPrivateProfileIntA("qa", "hooks", 31, ini);   /* bisecting aid */
     cfg.net_delay_ms = GetPrivateProfileIntA("qa", "net_delay_ms", 0, ini);
     cfg.net_jitter_ms = GetPrivateProfileIntA("qa", "net_jitter_ms", 0, ini);
     cfg.net_loss_pct = GetPrivateProfileIntA("qa", "net_loss_pct", 0, ini);
@@ -479,8 +503,8 @@ static void init(void)
     char path[MAX_PATH];
     snprintf(path, sizeof path, "%sT2MPFix.log", dir);
     g_log = fopen(path, "w");
-    logf_("T2MPFix 0.1 on Thief2MP 1.29, base %p; send_fix=%d recv_fix=%d interval=%d telemetry=%d",
-          (void *)g_base, cfg.send_fix, cfg.recv_fix, cfg.send_interval_ms, cfg.telemetry);
+    logf_("T2MPFix 0.1 on Thief2MP 1.29, base %p; send_fix=%d recv_fix=%d damage_fix=%d interval=%d telemetry=%d",
+          (void *)g_base, cfg.send_fix, cfg.recv_fix, cfg.damage_fix, cfg.send_interval_ms, cfg.telemetry);
 
     if (!SIG(A_GHOST_FRAME, SIG_GHOST_FRAME) || !SIG(A_SEND_DECIDE, SIG_SEND_DECIDE) || !SIG(A_SEND, SIG_SEND) ||
         !SIG(A_REMOTE_STEER, SIG_REMOTE_STEER) || !SIG(A_PHYS_GET_MODEL, SIG_PHYS_GET_MODEL) ||
@@ -499,6 +523,8 @@ static void init(void)
     if (cfg.hooks & 2) hook(A_SEND_DECIDE, hk_send_decide, (void **)&o_send_decide, "send_decide");
     if (cfg.hooks & 4) hook(A_SEND, hk_send, (void **)&o_send, "send");
     if (cfg.hooks & 8) hook(A_REMOTE_STEER, hk_steer, (void **)&o_steer, "remote_steer");
+    if (cfg.damage_fix && (cfg.hooks & 16) && SIG(A_NET_DAMAGE_FILTER, SIG_NET_DAMAGE_FILTER))
+        hook(A_NET_DAMAGE_FILTER, hk_damage_filter, (void **)&o_damage_filter, "damage_filter");
     if ((cfg.net_delay_ms || cfg.net_jitter_ms || cfg.net_loss_pct) && SIG(A_RECV_HEARTBEAT, SIG_RECV_HEARTBEAT)) {
         hook(A_RECV_HEARTBEAT, hk_recv_hb, (void **)&o_recv_hb, "recv_heartbeat");
         logf_("netsim: delay %d ms, jitter +-%d ms, loss %d%%, seed %d", cfg.net_delay_ms, cfg.net_jitter_ms,
@@ -509,8 +535,8 @@ static void init(void)
 
 static void shutdown_(void)
 {
-    logf_("exit: frames %u, forced sends %u, placement fallbacks %u, netsim delayed %u dropped %u", g_frames,
-          g_forced_sends, g_fallbacks, net_delayed, net_dropped);
+    logf_("exit: frames %u, forced sends %u, placement fallbacks %u, local-only damage %u, netsim delayed %u dropped %u",
+          g_frames, g_forced_sends, g_fallbacks, g_local_damage, net_delayed, net_dropped);
     if (g_tel) fclose(g_tel);
     if (g_log) fclose(g_log);
 }
