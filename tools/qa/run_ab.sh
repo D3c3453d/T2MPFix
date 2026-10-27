@@ -24,8 +24,8 @@ EOF
   python3 -I lanes.py shot host "${stamp}_${mode}_host" >/dev/null
   python3 -I lanes.py kill
   for l in host client1; do
-    cp $test/$l/ghostfix_tel.csv "$out/${l}_tel.csv"
-    cp $test/$l/ghostfix.log "$out/${l}_ghostfix.log"
+    cp $test/$l/T2MPFix_tel.csv "$out/${l}_tel.csv"
+    cp $test/$l/T2MPFix.log "$out/${l}_T2MPFix.log"
     [ -f $test/$l/crash.dmp ] && echo "$mode: $l CRASHED" && cp $test/$l/crash.dmp "$out/${l}_crash.dmp"
   done
   if [ "$mover" = host ]; then snd=host; rcv=client1; else snd=client1; rcv=host; fi

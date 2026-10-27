@@ -75,11 +75,11 @@ UI and input facts (for test automation):
 - `screen_dump` captures the 3D back buffer only, which is empty in menus.
 - With the Windows session locked, D3D can't present and nothing can be tested live.
 
-## Fix: ghostfix (mod/, dinput.dll proxy)
+## Fix: T2MPFix (mod/, dinput.dll proxy)
 
 - Send: for the local player ghost, `0x554fe0` is forced to "send" every 50 ms while moving/turning (plus one
   "stopped" heartbeat). Measured 16.3 heartbeats/s while moving vs 1.3/s stock.
-- Receive (only for senders proven to run ghostfix: ≥ 12 heartbeats/s while moving, which stock can't reach):
+- Receive (only for senders proven to run T2MPFix: ≥ 12 heartbeats/s while moving, which stock can't reach):
   per remote player, buffer received states (receive time, pos, vel, heading) and show the state at
   now − delay (delay = 1.5 × mean gap + 2 × jitter, clamped 60..300 ms; no gravity in extrapolation, capped 100 ms).
   The interpolated state is written into the ghost's prediction block and flag 0x200000 makes the stock steer code warp
@@ -94,13 +94,13 @@ other stands still; 65 s measured. path_dev = distance of the shown avatar from 
 | Run | path_dev p95 | path_dev max | frames >1 unit off path | lag p50 | heartbeats/s |
 |---|---|---|---|---|---|
 | stock, client moving, localhost | 2.371 | 3.031 | 2338 / 5926 | 0.982 | 1.3 |
-| ghostfix, client moving, localhost | 0.002 | 0.077 | 0 / 5926 | 0.314 | 16.3 |
+| T2MPFix, client moving, localhost | 0.002 | 0.077 | 0 / 5926 | 0.314 | 16.3 |
 | stock, host moving, localhost | 2.367 | 3.041 (lag max 14.3, 1 warp) | 2360 | 1.053 | 1.3 |
-| ghostfix, host moving, localhost | 0.002 | 0.066 | 0 | 0.307 | 16.3 |
+| T2MPFix, host moving, localhost | 0.002 | 0.066 | 0 | 0.307 | 16.3 |
 | stock, 60±30 ms, 2% loss | 2.428 | 3.38 | 2171 | 1.054 | 1.3 |
-| ghostfix, 60±30 ms, 2% loss | 0.004 | 0.094 | 0 | 0.648 | 16.3 |
+| T2MPFix, 60±30 ms, 2% loss | 0.004 | 0.094 | 0 | 0.648 | 16.3 |
 | stock, 150±75 ms, 10% loss | 2.651 | 7.13 | 2328 | 1.291 | 1.3 |
-| ghostfix, 150±75 ms, 10% loss | 0.011 | 0.249 | 0 | 1.059 | 16.3 |
+| T2MPFix, 150±75 ms, 10% loss | 0.011 | 0.249 | 0 | 1.059 | 16.3 |
 
 Network impairment is applied in the DLL in front of the heartbeat receiver (QA only; the exe imports no
 sendto/recvfrom/bind, so the transport is likely DirectPlay and the hub's UDP chaos relay doesn't fit). Visual check: screenshot of the host's view

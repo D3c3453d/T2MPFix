@@ -38,15 +38,15 @@ def setup(mode, *lane_bots):
         d = f'{TEST}/{lane}'
         shutil.copy(f'{ROOT}/mod/build/dinput.dll', f'{d}/dinput.dll')
         shutil.copy(f'{ROOT}/tools/qa/bots/{bot}.txt', f'{d}/bot_{lane}.txt')
-        with open(f'{d}/ghostfix.ini', 'w') as f:
-            f.write(f'[ghostfix]\nsend_fix={sf}\nrecv_fix={rf}\ntelemetry=1\nmax_players={os.environ.get("MAXP", "0")}\n[qa]\nenable=1\nbot=bot_{lane}.txt\n')
+        with open(f'{d}/T2MPFix.ini', 'w') as f:
+            f.write(f'[T2MPFix]\nsend_fix={sf}\nrecv_fix={rf}\ntelemetry=1\nmax_players={os.environ.get("MAXP", "0")}\n[qa]\nenable=1\nbot=bot_{lane}.txt\n')
             net = os.environ.get('NETSIM')            # "delay_ms,jitter_ms,loss_pct[,seed]"
             if net:
                 v = (net.split(',') + ['1'])[:4]
                 f.write(f'net_delay_ms={v[0]}\nnet_jitter_ms={v[1]}\nnet_loss_pct={v[2]}\nnet_seed={v[3]}\n')
         if os.path.isdir(f'{d}/MOVIES'):            # test copies only: no cutscenes, so sessions start fast
             os.rename(f'{d}/MOVIES', f'{d}/MOVIES_off')
-        for fn in ('ghostfix_tel.csv', 'ghostfix.log', 'qa_status.txt', 'qa_cmd.txt', 'crash.dmp'):
+        for fn in ('T2MPFix_tel.csv', 'T2MPFix.log', 'qa_status.txt', 'qa_cmd.txt', 'crash.dmp'):
             if os.path.exists(f'{d}/{fn}'):
                 os.remove(f'{d}/{fn}')
     print(f'setup {mode}: {lane_bots}')
@@ -59,7 +59,7 @@ def launch(*lanes):
         time.sleep(2)
     for lane in lanes:
         for _ in range(60):
-            log = f'{TEST}/{lane}/ghostfix.log'
+            log = f'{TEST}/{lane}/T2MPFix.log'
             if os.path.exists(log) and 'subclassed' in open(log).read():
                 break
             time.sleep(0.5)

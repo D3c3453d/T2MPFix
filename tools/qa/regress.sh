@@ -2,7 +2,7 @@
 # Full regression on the current build. Prints one summary line per scenario and PASS/FAIL against the bars below.
 #   stock (control): must show the bug          path_dev_max > 1.0
 #   fixed (localhost, 60/30/2, 150/75/10):        path_dev_max < 0.5, no frames > 1 unit off path, no jumps
-#   mixed (sender without ghostfix):              no worse than stock: jumps == 0, path_dev_max < 4
+#   mixed (sender without T2MPFix):              no worse than stock: jumps == 0, path_dev_max < 4
 set -uo pipefail
 test=${T2_TEST_DIR:-/mnt/d/thief_coop_test}
 cd "$(dirname "$0")"
@@ -30,7 +30,7 @@ check "fixed 60+-30ms 2% loss" "$(latest fixed_client1_net60-30-2)/summary.json"
 NETSIM=150,75,10,7 ./run_ab.sh 70 fixed >/dev/null 2>&1
 check "fixed 150+-75ms 10% loss" "$(latest fixed_client1_net150-75-10-7)/summary.json" "path_dev_max < 0.5 and frames_off_path_gt1 == 0 and jumps_gt3 == 0"
 
-# mixed: the moving player runs stock (no ghostfix), the observer runs ghostfix
+# mixed: the moving player runs stock (no T2MPFix), the observer runs T2MPFix
 python3 -I lanes.py kill
 python3 -I lanes.py setup fixed host:idle client1:walker:stock >/dev/null
 python3 -I lanes.py launch host client1 >/dev/null
@@ -38,7 +38,7 @@ python3 -I lanes.py start_session host client1 >/dev/null
 python3 -I lanes.py wait_ingame host client1 60 >/dev/null
 python3 -I -c "import time; time.sleep(70)"
 out=results/$(date +%Y%m%d_%H%M%S)_mixed; mkdir -p "$out"
-for l in host client1; do cp $test/$l/ghostfix_tel.csv "$out/${l}_tel.csv"; [ -f $test/$l/crash.dmp ] && echo "CRASH $l" && fail=1; done
+for l in host client1; do cp $test/$l/T2MPFix_tel.csv "$out/${l}_tel.csv"; [ -f $test/$l/crash.dmp ] && echo "CRASH $l" && fail=1; done
 python3 -I lanes.py kill
 python3 -I analyze.py "$out/client1_tel.csv" "$out/host_tel.csv" --json "$out/summary.json" >/dev/null
 check "mixed (mover without fix)" "$out/summary.json" "fixed_frames == 0 and path_dev_max < 4"

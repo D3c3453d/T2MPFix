@@ -1,7 +1,7 @@
 """Compare a player's true path (L lines on their machine) with how the other machine showed them
 (R lines for the ghost of that player). Both machines run on one PC, so the QPC timestamps share a clock.
 
-  python3 -I analyze.py <sender ghostfix_tel.csv> <receiver ghostfix_tel.csv> [--json out.json]
+  python3 -I analyze.py <sender T2MPFix_tel.csv> <receiver T2MPFix_tel.csv> [--json out.json]
 
 Metrics (units are Dark units, roughly 1 ft):
   path_dev   distance from the displayed avatar to the nearest point of the true path in the

@@ -1,4 +1,4 @@
-# ghostfix: smooth remote players for Thief 2 multiplayer (NewDark 1.29)
+# T2MPFix: smooth remote players for Thief 2 multiplayer (NewDark 1.29)
 
 Fixes the other players' avatars in Thief II multiplayer showing up in the wrong place: lagging
 behind, sticking on door frames and stairs, walking through walls, floating, or vanishing. Also
@@ -14,16 +14,16 @@ exe it does nothing.
 
 1. Have a working Thief 2 + NewDark 1.29 + multiplayer install (T2Fix 1.29 from
    https://github.com/Xanfre/T2Fix, tick "Thief 2 Multiplayer Beta"). Everyone must use the same version.
-2. Copy `dinput.dll` and `ghostfix.ini` from the release zip into the game folder (next to `Thief2MP.exe`).
-3. Start `Thief2MP.exe` as usual. A `ghostfix.log` file appears in the game folder; its first line
-   should say `ghostfix 0.1 on Thief2MP 1.29`.
+2. Copy `dinput.dll` and `T2MPFix.ini` from the release zip into the game folder (next to `Thief2MP.exe`).
+3. Start `Thief2MP.exe` as usual. A `T2MPFix.log` file appears in the game folder; its first line
+   should say `T2MPFix 0.1 on Thief2MP 1.29`.
 
 Hosting and joining are unchanged: the host forwards port 5198 (5199 too for the global server) or
 everyone uses a LAN VPN.
 
-Uninstall: delete `dinput.dll` and `ghostfix.ini`. Single-player `thief2.exe` is not affected.
+Uninstall: delete `dinput.dll` and `T2MPFix.ini`. Single-player `thief2.exe` is not affected.
 
-## Settings (`ghostfix.ini`)
+## Settings (`T2MPFix.ini`)
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -32,20 +32,20 @@ Uninstall: delete `dinput.dll` and `ghostfix.ini`. Single-player `thief2.exe` is
 | `send_interval_ms` | 50 | Send interval while moving |
 | `delay_min_ms` / `delay_max_ms` | 60 / 300 | Bounds for the display delay (it adapts to your connection's jitter) |
 | `max_players` | 4 | The host's player cap is set to N+1 (Figgis's finding), so 4 players can join. 0 = leave stock. Tested with all four players set to 4 |
-| `telemetry` | 0 | Write `ghostfix_tel.csv` for debugging |
+| `telemetry` | 0 | Write `T2MPFix_tel.csv` for debugging |
 
 ## How it works
 
 The stock engine sends a player's position only when the receiver's dead-reckoned guess is 4+ units
 off, moves the remote avatar as a local physics body chasing that guess (colliding with the world on
-the way), and only snaps it into place when it is 12 units off. ghostfix sends while moving, buffers
+the way), and only snaps it into place when it is 12 units off. T2MPFix sends while moving, buffers
 the received positions and places the avatar on the interpolated path every frame using the
 engine's own teleport. Addresses, the derivation and all measurements: [docs/NOTES.md](docs/NOTES.md).
 
 ## Results
 
 Two real game instances on one PC, one player driven by a movement bot (walk, run, jump, strafe,
-crouch, turn), the same session with and without ghostfix (`tools/qa/regress.sh`, build `72bcefc0…`).
+crouch, turn), the same session with and without T2MPFix (`tools/qa/regress.sh`, build `72bcefc0…`).
 path_dev = distance in Dark units of the shown avatar from the player's true path.
 
 ```
@@ -75,7 +75,7 @@ Needs Docker (the compiler runs in a container; nothing is installed on the host
 ```sh
 tools/fetch_tools.sh        # pinned llvm-mingw 20261006 into tools_build/, SHA-256 checked
 tools/build.sh              # -> mod/build/dinput.dll
-tools/package.sh 0.1        # -> dist/thief2-ghostfix-0.1.zip
+tools/package.sh 0.1        # -> dist/T2MPFix-0.1.zip
 ```
 
 The build is reproducible: the same source gives a byte-identical `dinput.dll` (no PE timestamp), so you
@@ -83,7 +83,7 @@ can rebuild a release and compare its hash with the one in the release descripti
 
 Releases are built by GitHub Actions (`.github/workflows/build.yml`) from source: every push and pull request
 builds, tests and uploads the zip as a run artifact. To release, bump the version in `mod/src/main.c`
-(`ghostfix <version> on Thief2MP`), then `git tag v<version> && git push origin v<version>`. The workflow
+(`T2MPFix <version> on Thief2MP`), then `git tag v<version> && git push origin v<version>`. The workflow
 creates a draft release with the zip and a description from `.github/release-notes.md` plus the hashes;
 check it and publish it.
 

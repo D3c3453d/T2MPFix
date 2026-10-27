@@ -1,4 +1,4 @@
-/* ghostfix: smooth, accurate remote player avatars for Thief 2 NewDark 1.29 multiplayer.
+/* T2MPFix: smooth, accurate remote player avatars for Thief 2 NewDark 1.29 multiplayer.
  *
  * Stock behaviour (see games/thief-2/NOTES.md):
  *  - the sender only sends a player heartbeat when the receiver's dead-reckoned guess is off by
@@ -8,7 +8,7 @@
  *    on the way, and only teleports when the error exceeds 12 units.
  * Result: avatars that lag, stick on doorframes and stairs, float, sink, or vanish into walls.
  *
- * ghostfix (all machines must run it):
+ * T2MPFix (all machines must run it):
  *  - send: while a player moves or turns, send a heartbeat every send_interval_ms (default 50);
  *  - receive: buffer the received states and show the remote player on the interpolated path,
  *    a fixed small delay behind, by placing the avatar there every frame with the engine's own
@@ -194,13 +194,13 @@ typedef struct {
     int obj;
     uint16_t seq;
     uint32_t recv_ms;
-    int fast;            /* sender proven to run ghostfix (high heartbeat rate while moving) */
+    int fast;            /* sender proven to run T2MPFix (high heartbeat rate while moving) */
     interp_t buf;
 } rstate_t;
 
 static rstate_t rs[16];
 
-/* A player without ghostfix sends ~1.3 heartbeats/s while moving, one with it ~16/s (14+ even with 10% loss
+/* A player without T2MPFix sends ~1.3 heartbeats/s while moving, one with it ~16/s (14+ even with 10% loss
  * and heavy jitter; stock bursts on state changes but never beats its 100 ms minimum interval). Interpolating the
  * sparse stock stream would cut corners, so keep stock behaviour for that player. Decide on the rate over the
  * last 1.5 s of buffered snapshots while the player moves. */
@@ -373,7 +373,7 @@ static void __cdecl hk_steer(uint8_t *rg, float dt)
 
     interp_out_t o;
     int fixed = 0;
-    /* A player without ghostfix sends ~1/s; interpolating that would cut corners, so keep stock for them. */
+    /* A player without T2MPFix sends ~1/s; interpolating that would cut corners, so keep stock for them. */
     if (cfg.recv_fix && st->fast && interp_sample(&st->buf, &cfg.ic, t, &o) &&
         o.relobj == FLD(rg, RG_RELOBJ, int32_t)) {
         memcpy(rg + RG_PRED + HB_POS, o.pos, 12);
@@ -428,17 +428,17 @@ static int sig_rebased(uintptr_t va, const char *sig, size_t n)
 static void load_config(const char *dir)
 {
     char ini[MAX_PATH];
-    snprintf(ini, sizeof ini, "%sghostfix.ini", dir);
-    cfg.send_fix = GetPrivateProfileIntA("ghostfix", "send_fix", 1, ini);
-    cfg.recv_fix = GetPrivateProfileIntA("ghostfix", "recv_fix", 1, ini);
-    cfg.telemetry = GetPrivateProfileIntA("ghostfix", "telemetry", 0, ini);
-    cfg.send_interval_ms = GetPrivateProfileIntA("ghostfix", "send_interval_ms", 50, ini);
-    cfg.ic.delay_min_ms = GetPrivateProfileIntA("ghostfix", "delay_min_ms", 60, ini);
-    cfg.ic.delay_max_ms = GetPrivateProfileIntA("ghostfix", "delay_max_ms", 300, ini);
+    snprintf(ini, sizeof ini, "%sT2MPFix.ini", dir);
+    cfg.send_fix = GetPrivateProfileIntA("T2MPFix", "send_fix", 1, ini);
+    cfg.recv_fix = GetPrivateProfileIntA("T2MPFix", "recv_fix", 1, ini);
+    cfg.telemetry = GetPrivateProfileIntA("T2MPFix", "telemetry", 0, ini);
+    cfg.send_interval_ms = GetPrivateProfileIntA("T2MPFix", "send_interval_ms", 50, ini);
+    cfg.ic.delay_min_ms = GetPrivateProfileIntA("T2MPFix", "delay_min_ms", 60, ini);
+    cfg.ic.delay_max_ms = GetPrivateProfileIntA("T2MPFix", "delay_max_ms", 300, ini);
     cfg.ic.nominal_gap_ms = cfg.send_interval_ms;
-    cfg.ic.max_extrap_ms = GetPrivateProfileIntA("ghostfix", "max_extrap_ms", 100, ini);
-    cfg.ic.snap_dist = (float)GetPrivateProfileIntA("ghostfix", "snap_dist", 20, ini);
-    cfg.max_players = GetPrivateProfileIntA("ghostfix", "max_players", 0, ini);
+    cfg.ic.max_extrap_ms = GetPrivateProfileIntA("T2MPFix", "max_extrap_ms", 100, ini);
+    cfg.ic.snap_dist = (float)GetPrivateProfileIntA("T2MPFix", "snap_dist", 20, ini);
+    cfg.max_players = GetPrivateProfileIntA("T2MPFix", "max_players", 0, ini);
     cfg.qa = GetPrivateProfileIntA("qa", "enable", 0, ini);
     cfg.hooks = GetPrivateProfileIntA("qa", "hooks", 15, ini);   /* bisecting aid */
     cfg.net_delay_ms = GetPrivateProfileIntA("qa", "net_delay_ms", 0, ini);
@@ -477,9 +477,9 @@ static void init(void)
     QueryPerformanceFrequency(&g_qpf);
     load_config(dir);
     char path[MAX_PATH];
-    snprintf(path, sizeof path, "%sghostfix.log", dir);
+    snprintf(path, sizeof path, "%sT2MPFix.log", dir);
     g_log = fopen(path, "w");
-    logf_("ghostfix 0.1 on Thief2MP 1.29, base %p; send_fix=%d recv_fix=%d interval=%d telemetry=%d",
+    logf_("T2MPFix 0.1 on Thief2MP 1.29, base %p; send_fix=%d recv_fix=%d interval=%d telemetry=%d",
           (void *)g_base, cfg.send_fix, cfg.recv_fix, cfg.send_interval_ms, cfg.telemetry);
 
     if (!SIG(A_GHOST_FRAME, SIG_GHOST_FRAME) || !SIG(A_SEND_DECIDE, SIG_SEND_DECIDE) || !SIG(A_SEND, SIG_SEND) ||
@@ -489,7 +489,7 @@ static void init(void)
         return;
     }
     if (cfg.telemetry) {
-        snprintf(path, sizeof path, "%sghostfix_tel.csv", dir);
+        snprintf(path, sizeof path, "%sT2MPFix_tel.csv", dir);
         g_tel = fopen(path, "w");
         if (g_tel) setvbuf(g_tel, NULL, _IOFBF, 1 << 16);
     }

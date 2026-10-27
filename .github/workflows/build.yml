@@ -34,10 +34,10 @@ jobs:
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             ver=${GITHUB_REF_NAME#v}
-            grep -qF "\"ghostfix $ver on Thief2MP" mod/src/main.c \
+            grep -qF "\"T2MPFix $ver on Thief2MP" mod/src/main.c \
               || { echo "::error::tag $GITHUB_REF_NAME but mod/src/main.c logs another version"; exit 1; }
           else
-            ver=$(grep -oP '"ghostfix \K[0-9.]+(?= on Thief2MP)' mod/src/main.c)-dev+${GITHUB_SHA::7}
+            ver=$(grep -oP '"T2MPFix \K[0-9.]+(?= on Thief2MP)' mod/src/main.c)-dev+${GITHUB_SHA::7}
           fi
           echo "ver=$ver" >> "$GITHUB_OUTPUT"
 
@@ -61,9 +61,9 @@ jobs:
             echo '## SHA-256'
             echo
             echo '```'
-            (cd dist && sha256sum "thief2-ghostfix-$VER.zip")
-            (cd mod/build && sha256sum dinput.dll) | sed 's| dinput.dll$| ghostfix/dinput.dll|'
-            (cd mod && sha256sum ghostfix.ini) | sed 's| ghostfix.ini$| ghostfix/ghostfix.ini|'
+            (cd dist && sha256sum "T2MPFix-$VER.zip")
+            (cd mod/build && sha256sum dinput.dll) | sed 's| dinput.dll$| T2MPFix/dinput.dll|'
+            (cd mod && sha256sum T2MPFix.ini) | sed 's| T2MPFix.ini$| T2MPFix/T2MPFix.ini|'
             echo '```'
             echo
             echo '`dinput.dll` is a reproducible build: rebuild this tag with `tools/build.sh` and compare.'
@@ -72,7 +72,7 @@ jobs:
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: thief2-ghostfix-${{ steps.ver.outputs.ver }}
+          name: T2MPFix-${{ steps.ver.outputs.ver }}
           path: |
             dist/*.zip
             dist/RELEASE_NOTES.md
@@ -95,4 +95,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/*.zip --notes-file dist/RELEASE_NOTES.md \
-            --repo "$GITHUB_REPOSITORY" --draft --title "ghostfix ${GITHUB_REF_NAME#v}"
+            --repo "$GITHUB_REPOSITORY" --draft --title "T2MPFix ${GITHUB_REF_NAME#v}"
