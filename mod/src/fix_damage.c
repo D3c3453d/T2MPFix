@@ -1,4 +1,4 @@
-/* damage_fix: damage from local-only objects (lava) is applied again; the rule and why are in damage.h. */
+/* damage_fix: damage from local-only objects (e.g. lava) is applied again; the rule and why are in damage.h. */
 #include <windows.h>
 #include "MinHook.h"
 #include "engine.h"
@@ -13,7 +13,7 @@ static unsigned applied;
 
 static int objnet(void *on, int slot, int obj) { return ((objnet_pred_t)(*(void ***)on)[slot / 4])(on, obj); }
 
-/* The engine zeroes damage from local-only culprits (lava) for every victim; let it through for victims
+/* The engine zeroes damage from local-only culprits (e.g. lava) for every victim; let it through for victims
  * this machine hosts, and leave everything else to the engine. */
 static int __stdcall hk_damage_filter(int victim, int culprit, void *msg, void *data)
 {

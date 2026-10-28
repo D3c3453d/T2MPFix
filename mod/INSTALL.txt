@@ -4,8 +4,10 @@ T2MPFix for Thief II multiplayer (NewDark 1.29) - four separate fixes
 1. Smooth remote players (send_fix=1, recv_fix=1): other players' avatars are shown on their real
    path instead of lagging, sticking on geometry, floating or vanishing.
 2. Stock steering bug (steer_fix=1): players without T2MPFix no longer drift several units behind.
-3. 4-player cap (max_players=4): the 4th player joining no longer kicks two others.
-4. Lava damage (damage_fix=1): lava and other local-only hazards hurt players again.
+3. Player limit (max_players=4): as many players as you set can join; stock's cap is off by
+   one, so the last player to join drops others. Example: a 4th player joining kicks two others.
+4. Environmental damage (damage_fix=1): hazards each game runs locally hurt players again;
+   stock multiplayer drops their damage. Example: lava does nothing.
 
 Each one has its own switch in T2MPFix.ini; set it to 0 to turn just that fix off. T2MPFix.log
 lists which fixes are on.

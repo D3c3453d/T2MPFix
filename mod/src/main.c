@@ -1,8 +1,8 @@
 /* T2MPFix: fixes for Thief 2 NewDark 1.29 multiplayer, as independent modules (see fixes.h):
  *  - smooth remote players: send_fix (fix_send.c) + recv_fix (fix_recv.c);
  *  - stock steering for players that aren't interpolated: steer_fix (fix_steer.c);
- *  - the 4-player cap: max_players (fix_players.c);
- *  - lava damage: damage_fix (fix_damage.c).
+ *  - the player limit: max_players (fix_players.c);
+ *  - damage from local-only hazards (e.g. lava): damage_fix (fix_damage.c).
  * This file is the core: the exe check, config, log, engine helpers, the ghost hooks the avatar fixes plug
  * into (also used by QA telemetry), and the QA bot and network impairment.
  *

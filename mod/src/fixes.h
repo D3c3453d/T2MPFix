@@ -2,8 +2,8 @@
  *   send_fix     send your position ~20x/s while moving          (fix_send.c)  } smooth remote players
  *   recv_fix     show other players on their interpolated path   (fix_recv.c)  }
  *   steer_fix    stock steering without its uninitialized read   (fix_steer.c)  players not interpolated
- *   max_players  player cap N+1, so a 4th joiner kicks nobody    (fix_players.c)
- *   damage_fix   lava and other local-only hazards hurt again    (fix_damage.c)
+ *   max_players  player cap N+1, so N players can join           (fix_players.c)
+ *   damage_fix   local-only hazards (e.g. lava) hurt again       (fix_damage.c)
  * A fix that is off (or whose engine code doesn't match) installs nothing and leaves the engine stock.
  * To retire one for good: delete its file, its line in main.c's fixes[], and its entry in the build lists. */
 #pragma once

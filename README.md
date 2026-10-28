@@ -7,8 +7,10 @@ Four separate fixes for Thief II multiplayer, each with its own switch in `T2MPF
    vanishing).
 2. **Stock steering bug** (`steer_fix`): players that fix 1 doesn't cover (those without T2MPFix) no longer
    drift several units behind, caused by an uninitialized read in the engine's steering code.
-3. **4-player cap** (`max_players`): a 4th player joining no longer kicks two others.
-4. **Lava damage** (`damage_fix`): lava and other local-only hazards hurt players again.
+3. **Player limit** (`max_players`): as many players as you set can join; stock's cap is off by one, so the
+   last player to join drops others. Example: a 4th player joining kicks two others.
+4. **Environmental damage** (`damage_fix`): hazards each game runs locally hurt players again; stock
+   multiplayer drops their damage. Example: lava does nothing.
 
 **Everyone in the session should install it.** The avatar fix changes how often your own position is sent as
 well as how the others are shown. A player without it is still shown by the stock code (plus fix 2 on the
@@ -63,17 +65,17 @@ It only matters for players that `recv_fix` doesn't interpolate: players without
 turn `recv_fix` off. Such a player's path deviation: p95 6.5 / max 7.7 units with the stock code, 2.4 / 3.0 with
 `steer_fix`.
 
-### 3. 4-player cap: `max_players`
+### 3. Player limit: `max_players`
 
 | Key | Default | What it does |
 |---|---|---|
-| `max_players` | 4 (0 in code) | The host sets the engine's player cap to N+1 (Figgis's finding), so N players can join; stock keeps 4, so the 4th joiner gets two others kicked. 0 = leave stock. Tested with all four players set to 4 |
+| `max_players` | 4 (0 in code) | Lets N players join: the host sets the engine's player cap to N+1 (Figgis's finding). At the stock cap the last player to join gets others kicked. Example: stock keeps 4, so a 4th joiner kicks two others. 0 = leave stock. Tested with all four players set to 4 |
 
-### 4. Lava damage: `damage_fix`
+### 4. Environmental damage: `damage_fix`
 
 | Key | Default | What it does |
 |---|---|---|
-| `damage_fix` | 1 | Lava (and other damage from local-only objects) hurts players again. Stock multiplayer zeroes it on every machine; with this, each player's own game applies it to them. 0 = stock |
+| `damage_fix` | 1 | Hazards each game runs locally (local-only objects) hurt players again. Stock multiplayer zeroes their damage on every machine; with this, each player's own game applies it to them. Example: lava. 0 = stock |
 
 ### Other settings
 
@@ -187,7 +189,7 @@ check it and publish it.
 | `mod/src/fix_steer.c` | fix 2 (`steer_fix`): patch for the stock steering's uninitialized read |
 | `mod/src/fix_players.c` | fix 3 (`max_players`): player cap N+1 |
 | `mod/src/fix_damage.c` | fix 4 (`damage_fix`): damage filter hook |
-| `mod/src/damage.h` | when local-only damage (lava) is let through (unit tested) |
+| `mod/src/damage.h` | when local-only damage (e.g. lava) is let through (unit tested) |
 | `mod/src/interp.c` | snapshot buffer and interpolation (no engine dependencies, unit tested) |
 | `mod/src/engine.h` | Thief2MP 1.29 addresses, struct offsets, byte signatures checked at startup |
 | `mod/src/qa.c` | QA channel: injected mouse input, engine commands, window activation |
