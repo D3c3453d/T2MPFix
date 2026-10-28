@@ -22,7 +22,7 @@ other exe it does nothing.
    https://github.com/Xanfre/T2Fix, tick "Thief 2 Multiplayer Beta"). Everyone must use the same version.
 2. Copy `dinput.dll` and `T2MPFix.ini` from the release zip into the game folder (next to `Thief2MP.exe`).
 3. Start `Thief2MP.exe` as usual. A `T2MPFix.log` file appears in the game folder; its first line
-   should say `T2MPFix 0.1 on Thief2MP 1.29`.
+   should say `T2MPFix 0.2 on Thief2MP 1.29`.
 
 Hosting and joining are unchanged: the host forwards port 5198 (5199 too for the global server) or
 everyone uses a LAN VPN.
@@ -105,7 +105,8 @@ Addresses, the derivation and all measurements: [docs/NOTES.md](docs/NOTES.md).
 ## Results
 
 Two real game instances on one PC on mission 1, one player driven by a movement bot (walk, run, jump, strafe,
-crouch, turn), the same session with each set of fixes (`tools/qa/regress.sh`, build `04d806c9…`). path_dev =
+crouch, turn), the same session with each set of fixes (`tools/qa/regress.sh`, build `04d806c9…`, which differs
+from the 0.2 release only in the version string). path_dev =
 distance in Dark units of the shown avatar from the player's true path. "stock" is the real game: the steer
 function is not hooked (telemetry reads the ghost table instead).
 
@@ -149,7 +150,7 @@ Needs Docker (the compiler runs in a container; nothing is installed on the host
 ```sh
 tools/fetch_tools.sh        # pinned llvm-mingw 20261006 into tools_build/, SHA-256 checked
 tools/build.sh              # -> mod/build/dinput.dll
-tools/package.sh 0.1        # -> dist/T2MPFix-0.1.zip
+tools/package.sh 0.2        # -> dist/T2MPFix-0.2.zip
 ```
 
 The build is reproducible: the same source gives a byte-identical `dinput.dll` (no PE timestamp), so you

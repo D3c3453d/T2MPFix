@@ -450,7 +450,7 @@ static void init(void)
     load_config(ini, dir);
     snprintf(path, sizeof path, "%sT2MPFix.log", dir);
     g_log = fopen(path, "w");
-    logf_("T2MPFix 0.1 on Thief2MP 1.29, base %p; telemetry=%d qa=%d hooks=%d", (void *)g_base, cfg.telemetry,
+    logf_("T2MPFix 0.2 on Thief2MP 1.29, base %p; telemetry=%d qa=%d hooks=%d", (void *)g_base, cfg.telemetry,
           cfg.qa, g_hook_mask);
     if (MH_Initialize() != MH_OK) { logf_("MH_Initialize failed"); return; }
 
