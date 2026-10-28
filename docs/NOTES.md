@@ -150,9 +150,13 @@ other stands still; 65 s measured. path_dev = distance of the shown avatar from 
 | stock, 150±75 ms, 10% loss | 2.651 | 7.13 | 2328 | 1.291 | 1.3 |
 | T2MPFix, 150±75 ms, 10% loss | 0.011 | 0.249 | 0 | 1.059 | 16.3 |
 
-Network impairment is applied in the DLL in front of the heartbeat receiver (QA only; the exe imports no
-sendto/recvfrom/bind, so the transport is likely DirectPlay and the hub's UDP chaos relay doesn't fit). Visual check: screenshot of the host's view
+Network impairment is applied in the DLL in front of the heartbeat receiver (QA only; doing it there is simpler than putting
+the hub's UDP chaos relay in front of DirectPlay's ports). Visual check: screenshot of the host's view
 shows the client's avatar on the ground at the telemetry position (tools/qa shots, not committed).
+
+The game transport is DirectPlay: Windows offers to install DirectPlay on the game's first launch, and the exe has
+`Could not initialize DirectPlay` (0x683f60), `DPlay initialization error: %s (0x%X)`, `DPlayException` and
+`cCDPlayer` RTTI. The exe imports no sendto/recvfrom/bind; DirectPlay's own DLLs do the socket work.
 
 - Player cap: `cNetManager` field +0x136 (default 4 written at `0x438d39`), `SetMaxPlayers` = vtable slot 40
   (`0x43a230`, stdcall). Stock lobby with 4 instances: Client3 joining kicked Client1 and Client2 (reproduced).
@@ -234,7 +238,6 @@ Verified: host and client each die within ~2 s in the Soulforge lava; the other 
 
 ## Unknowns
 
-- The game transport: no sendto/recvfrom/bind imports, so likely DirectPlay (not verified).
 - Remote players on elevators and moving platforms (heartbeats relative to an object fall back to stock steering),
   ladders, rope arrows, mantling, swimming, saves/loads, mission changes, fan missions, a session over the
   Internet (network impairment was only simulated in the DLL): not tested.

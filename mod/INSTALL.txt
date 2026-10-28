@@ -18,6 +18,12 @@ Install (everyone in the session; a player without it is shown the stock way):
 2. Copy dinput.dll and T2MPFix.ini from this folder into the game folder, next to Thief2MP.exe.
 3. Start Thief2MP.exe. The game folder gets a T2MPFix.log; its first line should say
    "T2MPFix 0.2 on Thief2MP 1.29". If it doesn't appear, the exe is not the 1.29 MP exe.
+   On the first launch Windows offers to install DirectPlay: accept it, or multiplayer won't
+   start. If you dismissed it, turn DirectPlay on by hand:
+   a. Press Win+R, type  optionalfeatures  and press Enter. (Or open the Start menu, type
+      "Turn Windows features on or off" and click the result.)
+   b. In the list, click the + next to "Legacy Components" to expand it.
+   c. Tick "DirectPlay", click OK and wait until Windows says it's done. Restart if asked.
 
 Hosting and joining are unchanged (host port 5198, see the video guide).
 
