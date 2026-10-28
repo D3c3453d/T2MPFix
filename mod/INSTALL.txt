@@ -17,7 +17,7 @@ Install (everyone in the session; a player without it is shown the stock way):
    "Thief 2 Multiplayer Beta" in the component list. Everyone must use the same version.
 2. Copy dinput.dll and T2MPFix.ini from this folder into the game folder, next to Thief2MP.exe.
 3. Start Thief2MP.exe. The game folder gets a T2MPFix.log; its first line should say
-   "T2MPFix 0.1 on Thief2MP 1.29". If it doesn't appear, the exe is not the 1.29 MP exe.
+   "T2MPFix 0.2 on Thief2MP 1.29". If it doesn't appear, the exe is not the 1.29 MP exe.
 
 Hosting and joining are unchanged (host port 5198, see the video guide).
 
