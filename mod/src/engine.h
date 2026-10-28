@@ -24,6 +24,8 @@ extern uintptr_t g_base;
 #define A_PHYS_GET_MODEL     0x516c90  /* cPhysModel* __stdcall (int obj) */
 #define A_COMMAND_EXECUTE    0x41a940  /* char* (EAX = char* cmd): engine command line */
 #define A_OBJ_POS_UPDATE     0x559c30  /* void (ECX = float pos[3], EDX = obj, [stack] = short facing[3]) */
+#define A_STEER_VEL_CHECK    0x553f07  /* inside A_REMOTE_STEER: moving player, "|v|^2 <= 1 ? follow pred vel : d + pred vel"
+                                          where v is three stack floats never written on this path (engine bug) */
 #define A_NET_DAMAGE_FILTER  0x44bce0  /* int __stdcall (int victim, int culprit, sDamageMsg*, void*): MP damage
                                           filter; returns 1 after zeroing the damage to veto it, 0 = no opinion */
 
@@ -39,6 +41,7 @@ extern uintptr_t g_base;
 #define OBJNET_IS_PROXY      0x1c      /* owned by another machine */
 #define OBJNET_HOSTED_HERE   0x20      /* owned by this machine */
 #define OBJNET_LOCAL_ONLY    0x24      /* NetworkCategory Local Only: every machine has its own copy */
+#define A_REMOTE_GHOSTS      0x8c5a80  /* hash of RemoteGhost*: +4 bucket array, +8 bucket count; node {RemoteGhost*, next} */
 #define A_POSITION_TABLE     0xab9e60  /* -> {.., +0x18 Position*[obj], +0x20 count}; Position: vec +0, facing +0x10 */
 
 /* Signatures: first bytes at each hooked function, checked before hooking. */
@@ -49,6 +52,11 @@ extern uintptr_t g_base;
 #define SIG_REMOTE_STEER     "\x83\xec\x24\x53\x55\x8b\x6c\x24\x30\x56\x8b\x75\x00"
 #define SIG_PHYS_GET_MODEL   "\x83\xec\x14\x53\x8b\x5c\x24\x1c\x56\x57\x53"
 #define SIG_NET_DAMAGE_FILTER "\x53\x55\x8b\x6c\x24\x14\x8b\x5d\x1c\x8b\xc5"
+/* A_STEER_VEL_CHECK .. the jp to the "follow pred vel" branch (0x553fbd): fld [esp+0x14]; mov edx,1;
+ * fld [esp+0x10]; fld [esp+0x18]; |.|^2; fcomp 1.0; jp. [esp+0x1c..0x24] holds d = pred - physics pos. */
+#define SIG_STEER_VEL_CHECK  "\xd9\x44\x24\x14\xba\x01\x00\x00\x00\xd9\x44\x24\x10\xd9\x44\x24\x18\xd9\xc1\xde\xca" \
+                             "\xd9\xc2\xde\xcb\xd9\xc9\xde\xc2\xdc\xc8\xde\xc1\xd9\x5c\x24\x38\xd8\x5c\x24\x38\xdf\xe0" \
+                             "\xf6\xc4\x05\x0f\x8a\x82\x00\x00\x00"
 #define SIG_OBJ_POS_UPDATE   "\xa1\x60\x9e\xab\x00\x56\x8b\x74\x24\x08\x3b\x50\x20"   /* absolute: compare rebased */
 
 /* cPhysModel */

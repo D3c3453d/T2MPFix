@@ -1,5 +1,13 @@
-Fixes other players' avatars in Thief 2 multiplayer (NewDark 1.29) lagging, sticking in walls,
-floating or vanishing, and the "4th player joining kicks two others" bug.
+Four separate fixes for Thief 2 multiplayer (NewDark 1.29), each with its own switch in `T2MPFix.ini`:
+
+| Fix | Switch | What it fixes |
+|---|---|---|
+| 1. Smooth remote players | `send_fix=1` and `recv_fix=1` | Other players' avatars lagging, sticking in walls and on door frames, floating or vanishing. `send_fix` sends your position 20×/s while you move; `recv_fix` shows the others on their real path |
+| 2. Stock steering bug | `steer_fix=1` | Players without T2MPFix drifting several units behind: the engine's steering tests uninitialized memory |
+| 3. 4-player cap | `max_players=4` | The 4th player joining kicks two others |
+| 4. Lava damage | `damage_fix=1` | Lava (and other local-only hazards) doing no damage in multiplayer |
+
+Set a switch to 0 to turn that fix off; the others keep working. `T2MPFix.log` lists which fixes are on.
 
 ## Install
 

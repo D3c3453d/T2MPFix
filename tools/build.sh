@@ -9,5 +9,6 @@ mkdir -p "$root/mod/build"
 docker run --rm -u "$(id -u):$(id -g)" -v "$root/tools_build/$tc:/tc:ro" -v "$root/mod:/src" -w /src \
   eclipse-temurin:25-jdk /tc/bin/i686-w64-mingw32-clang -O2 -mstackrealign -Wall -Wextra -Wno-unused-parameter \
   -Isrc -Ithird_party/minhook/include -shared -o build/dinput.dll \
-  src/main.c src/proxy.c src/interp.c src/qa.c $mh/hook.c $mh/buffer.c $mh/trampoline.c $mh/hde/hde32.c \
+  src/main.c src/proxy.c src/interp.c src/qa.c src/fix_send.c src/fix_recv.c src/fix_steer.c src/fix_players.c src/fix_damage.c \
+  $mh/hook.c $mh/buffer.c $mh/trampoline.c $mh/hde/hde32.c \
   src/dinput.def -s -static -Wl,--no-insert-timestamp
