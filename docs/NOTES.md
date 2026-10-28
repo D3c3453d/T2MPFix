@@ -77,15 +77,63 @@ UI and input facts (for test automation):
 
 ## Fix: T2MPFix (mod/, dinput.dll proxy)
 
-- Send: for the local player ghost, `0x554fe0` is forced to "send" every 50 ms while moving/turning (plus one
-  "stopped" heartbeat). Measured 16.3 heartbeats/s while moving vs 1.3/s stock.
-- Receive (only for senders proven to run T2MPFix: ≥ 12 heartbeats/s while moving, which stock can't reach):
-  per remote player, buffer received states (receive time, pos, vel, heading) and show the state at
-  now − delay (delay = 1.5 × mean gap + 2 × jitter, clamped 60..300 ms; no gravity in extrapolation, capped 100 ms).
-  The interpolated state is written into the ghost's prediction block and flag 0x200000 makes the stock steer code warp
-  there. If the warp refuses (body doesn't fit), `0x559c30` (ObjPosUpdate) places it anyway. Never needed in tests so far.
+Four independent fixes, one module each, each switched by its own `T2MPFix.ini` key (`mod/src/fixes.h`). A fix
+that is off or whose signatures don't match hooks nothing; `T2MPFix.log` has one status line per fix and an
+`active:` line. The core (`main.c`) owns the ghost hooks (`0x5516e0`, `0x554fe0`, `0x554d40`, `0x553dc0`) because QA
+needs some of them with every fix off; the avatar fix plugs in through `ghost_send_force` and
+`ghost_steer_pre`/`ghost_steer_post`, and each hook is installed only when a fix or QA needs it
+(`ghost_hooks_needed`, unit tested). With all fixes and QA off nothing is hooked. The steer function `0x553dc0` is
+hooked only for `recv_fix`: hooking it changes stock steering (fix 2), so telemetry reads the remote players by
+walking the remote ghost hash `0x8c5a80` around the ghost frame instead.
+
+1. Smooth remote players, two halves:
+   - `send_fix` (`fix_send.c`): for the local player ghost, `0x554fe0` is forced to "send" every 50 ms while
+     moving/turning (plus one "stopped" heartbeat). Measured 16.3 heartbeats/s while moving vs 1.3/s stock.
+   - `recv_fix` (`fix_recv.c`), only for senders proven to run `send_fix` (≥ 12 heartbeats/s while moving, which
+     stock can't reach): per remote player, buffer received states (receive time, pos, vel, heading) and show the
+     state at now − delay (delay = 1.5 × mean gap + 2 × jitter, clamped 60..300 ms; no gravity in extrapolation,
+     capped 100 ms). The interpolated state is written into the ghost's prediction block and flag 0x200000 makes the
+     stock steer code warp there. If the warp refuses (body doesn't fit), `0x559c30` (ObjPosUpdate) places it
+     anyway. Never needed in tests so far.
+   - Alone: `send_fix` gives receivers ~16 heartbeats/s, but their stock steering still sticks on the same geometry
+     (path_dev no better than stock); `recv_fix` does nothing until a sender runs `send_fix`. Both pinned by
+     `regress.sh` (send_only, recv_only).
+2. `steer_fix` (`fix_steer.c`): a 6-byte patch in the stock steering, see "Stock steering reads uninitialized
+   stack" below.
+3. `max_players` (`fix_players.c`): `SetMaxPlayers(N+1)` once the net manager exists (below).
+4. `damage_fix` (`fix_damage.c`): the damage filter hook, see "Lava does no damage" below.
+
+## Test results (2026-10-28, modules, build `dinput.dll` `04d806c9…`, mission 1)
+
+`tools/qa/regress.sh`, ALL PASS (stock = steer function not hooked, i.e. the real game):
+
+```
+PASS stock localhost (control)    travelled  260.3  path_dev p95 6.481 max 7.652  off>1  3896  jumps 1  lag p50 3.04  hb/s 1.3  fixed 0/6519
+PASS fixed localhost              travelled  260.1  path_dev p95 0.003 max 0.127  off>1     0  jumps 0  lag p50 0.30  hb/s 16.5  fixed 6209/6527
+PASS fixed 60+-30ms 2% loss       travelled  259.8  path_dev p95 0.004 max 0.125  off>1     0  jumps 0  lag p50 0.62  hb/s 15.7  fixed 6182/6517
+PASS fixed 150+-75ms 10% loss     travelled  257.8  path_dev p95 0.013 max 0.236  off>1     0  jumps 0  lag p50 0.98  hb/s 11.6  fixed 6093/6503
+PASS send_fix only                travelled  259.8  path_dev p95 9.177 max 12.000  off>1  3482  jumps 2  lag p50 1.68  hb/s 16.5  fixed 0/6519
+PASS recv_fix only                travelled  259.7  path_dev p95 2.401 max 3.060  off>1  2668  jumps 0  lag p50 1.02  hb/s 1.3  fixed 0/6529
+PASS steer_fix only               travelled  257.1  path_dev p95 2.378 max 3.006  off>1  2702  jumps 1  lag p50 1.09  hb/s 1.4  fixed 0/6514
+PASS mixed (mover without fix)    travelled  257.3  path_dev p95 2.438 max 3.124  off>1  2667  jumps 1  lag p50 1.08  hb/s 1.3  fixed 0/6396
+```
+
+- send_fix only = a T2MPFix player seen by a player without it: worse than stock (the stock steering's no-correction
+  branch with more frequent heartbeats; 2 snaps at 12 units).
+- recv_fix only: steer_fix off but the result matches it, because the uninitialized read happened to go the good way
+  behind this build's `hk_steer`. Not something to rely on.
+- Each fix alone, every other fix off:
+  - `max_players=4`: 4 instances in mission 1 for 60+ s, the host sees 3 remote players every frame. Control with
+    `max_players=0`: client1 "Network Connection Lost!" in the lobby, host and client3 stuck at "Waiting...".
+  - `damage_fix=1` (`tools/qa/lava.sh 1`): host alone on Soulforge walks into the lava; log shows damage from obj 1739
+    (`Water Flow Group`) to the player, "Host has died". `damage_fix=0`: standing in the lava at full health.
+  - Startup log for all on, each one off, and all off: each off fix logs "off in T2MPFix.ini" and installs nothing;
+    with all off and QA off there is no hook and no patch.
 
 ## Test results (2026-10-26, NewDark 1.29 MP, Steam build 1970, 2 instances on one PC, mission 1)
+
+The "stock" rows here were measured with the steer function hooked for telemetry, which changed stock steering (see
+"Stock steering reads uninitialized stack"): they are closer to `steer_fix` than to the real game.
 
 Harness: `tools/qa/run_ab.sh` (A/B: identical session and bot, only the ini differs), metric `tools/qa/analyze.py`.
 One player runs `tools/qa/bots/walker.txt` (walk, run, jump, strafe, turn, crouch, back, circle; 30 s loop), the
@@ -109,6 +157,33 @@ shows the client's avatar on the ground at the telemetry position (tools/qa shot
 - Player cap: `cNetManager` field +0x136 (default 4 written at `0x438d39`), `SetMaxPlayers` = vtable slot 40
   (`0x43a230`, stdcall). Stock lobby with 4 instances: Client3 joining kicked Client1 and Client2 (reproduced).
   With the cap set to 5: all 4 stay and play.
+
+## Stock steering reads uninitialized stack (fixed by `steer_fix`)
+
+Found when the module split moved code around in `hk_steer` and the *stock* control got worse (path_dev max 3.0 ->
+7.5, lag p50 1.0 -> 3.0) with the same game. A/B with old and new DLLs split by side: only the receiver's DLL mattered.
+
+`0x553dc0` (steer), moving player (`|pred vel|^2 > 1`), at `0x553f07`: `fld [esp+0x14]; fld [esp+0x10]; fld [esp+0x18]`,
+`|.|^2` compared with 1.0, `jp 0x553fbd`. Those three floats are never written on this path (Ghidra: `local_24/20/1c`).
+- `|garbage|^2 <= 1` -> `0x553fbd`: physics velocity = predicted velocity only. The avatar never closes the gap and
+  trails until the 12-unit warp.
+- otherwise: velocity = (pred - pos) + predicted velocity (pulls toward the prediction, time constant 1 s).
+- The slots hold whatever the previous call at that stack depth left, so any hook in the call chain (our old
+  `hk_steer`) changes the result. The old DLL happened to leave large values; the plain game doesn't.
+
+Measured (host observes, client1 walks with stock sending, 70 s, mission 1):
+
+| Receiver | path_dev p95 | max | lag p50 |
+|---|---|---|---|
+| real stock (steer not hooked, telemetry from the ghost hash) | 6.63 | 7.75 | 3.03 |
+| stock behind the new `hk_steer` (no fix) | 6.49 | 7.52 | 3.06 |
+| stock behind the old `hk_steer` (no fix), the "stock" of the earlier tables | 2.39 | 3.00 | 1.09 |
+| patch: read `d = pred - pos` instead ("correct only when > 1 unit off") | 5.63 | 8.11 | 1.15 |
+| patch: drop the branch (always correct), shipped as `steer_fix` | 2.37 | 3.04 | 1.09 |
+
+So the earlier "stock" rows (path_dev max ~3) were stock plus our hook's lucky stack; real stock is ~7.7. The
+`d` variant is the code's likely intent but is worse here, so `steer_fix` NOPs the `jp` at `0x553f35`
+(`0f 8a 82 00 00 00` -> `66 0f 1f 44 00 00`), after checking 52 bytes from `0x553f07`.
 
 ## Lava does no damage in multiplayer (fixed by `damage_fix`)
 
@@ -152,6 +227,9 @@ Verified: host and client each die within ~2 s in the Soulforge lava; the other 
 - When a stimulus "does nothing", log each hop (propagator -> sensor -> receptron -> effect -> damage model ->
   filters) on the live game before reading more decompile: here the decompile of the stimulator had "unreachable"
   blocks removed, and the real cause was a damage filter three layers further down.
+- A hook in front of an engine function can change that function's behaviour without touching its data: the
+  stock steer code reads stack slots it never writes, so what our hook left there decided whether avatars drift.
+  Measure the stock control with nothing hooked in that call chain, and A/B a refactor's *stock* mode too.
 - A locked Windows session makes every visual or input test fail silently (D3D can't present); check `LogonUI` first.
 
 ## Unknowns

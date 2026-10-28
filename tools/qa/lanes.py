@@ -1,6 +1,7 @@
 """Drive Thief2MP test lanes on the Windows desktop from WSL.
 
   python3 -I lanes.py setup <stock|fixed> host:idle client1:walker   copy DLL, ini, bots; clear telemetry
+                                                                     (env MAXP=max_players, DAMAGE=damage_fix, STEER=steer_fix, NETSIM)
   python3 -I lanes.py launch host client1                            start the games, place windows
   python3 -I lanes.py qa <lane> "<cmd>; <cmd>; ..."                  queue QA commands (see mod/src/qa.c)
   python3 -I lanes.py shot <lane> [name]                             screen capture of that window
@@ -13,7 +14,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 TEST = os.environ.get('T2_TEST_DIR', '/mnt/d/thief_coop_test')   # Windows folder with the lanes, as a WSL path
 WIN_TEST = subprocess.run(['wslpath', '-w', TEST], capture_output=True, text=True).stdout.strip()
 PLACE = {'host': (0, 0), 'client1': (1020, 0), 'client2': (0, 640), 'client3': (1020, 640)}
-MODES = {'stock': (0, 0), 'fixed': (1, 1), 'send_only': (1, 0), 'recv_only': (0, 1)}
+MODES = {'stock': (0, 0, 0), 'fixed': (1, 1, 1), 'send_only': (1, 0, 0), 'recv_only': (0, 1, 0), 'steer_only': (0, 0, 1)}  # send, recv, steer
 
 
 def ps(script, *args):
@@ -34,12 +35,13 @@ def setup(mode, *lane_bots):
         shutil.copy(f'{ROOT}/tools/win/{tool}', f'{TEST}/{tool}')
     for lb in lane_bots:
         lane, bot, *lm = lb.split(':')
-        sf, rf = MODES[lm[0] if lm else mode]
+        sf, rf, st = MODES[lm[0] if lm else mode]
+        st = os.environ.get('STEER', st)
         d = f'{TEST}/{lane}'
         shutil.copy(f'{ROOT}/mod/build/dinput.dll', f'{d}/dinput.dll')
         shutil.copy(f'{ROOT}/tools/qa/bots/{bot}.txt', f'{d}/bot_{lane}.txt')
         with open(f'{d}/T2MPFix.ini', 'w') as f:
-            f.write(f'[T2MPFix]\nsend_fix={sf}\nrecv_fix={rf}\ntelemetry=1\nmax_players={os.environ.get("MAXP", "0")}\n[qa]\nenable=1\nbot=bot_{lane}.txt\n')
+            f.write(f'[T2MPFix]\nsend_fix={sf}\nrecv_fix={rf}\nsteer_fix={st}\ntelemetry=1\nmax_players={os.environ.get("MAXP", "0")}\ndamage_fix={os.environ.get("DAMAGE", "1")}\n[qa]\nenable=1\nbot=bot_{lane}.txt\n')
             net = os.environ.get('NETSIM')            # "delay_ms,jitter_ms,loss_pct[,seed]"
             if net:
                 v = (net.split(',') + ['1'])[:4]
@@ -167,3 +169,4 @@ if __name__ == '__main__':
     r = fn(*sys.argv[2:])
     if isinstance(r, str):
         print(r)
+    sys.exit(1 if r is False else 0)

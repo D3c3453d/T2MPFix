@@ -137,7 +137,7 @@ static BOOL WINAPI hk_peek(LPMSG m, HWND h, UINT a, UINT b, UINT r)
     return o_peek(m, h, a, b, r);
 }
 
-void qa_init(const char *dir, int enabled)
+void qa_init(const char *dir, int enabled, int need_tick)
 {
     qa_on = enabled;
     snprintf(cmd_path, sizeof cmd_path, "%sqa_cmd.txt", dir);
@@ -145,5 +145,5 @@ void qa_init(const char *dir, int enabled)
     DeleteFileA(cmd_path);
     MH_STATUS s = MH_CreateHookApi(L"user32", "PeekMessageA", hk_peek, (void **)&o_peek);
     if (s == MH_OK) s = MH_EnableHook(MH_ALL_HOOKS);
-    logf_("tick hook: %s%s", MH_StatusToString(s), qa_on ? ", QA channel on" : "");
+    logf_("tick hook: %s%s%s", MH_StatusToString(s), need_tick ? ", fix ticks" : "", qa_on ? ", QA channel on" : "");
 }

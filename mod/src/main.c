@@ -1,20 +1,18 @@
-/* T2MPFix: smooth, accurate remote player avatars for Thief 2 NewDark 1.29 multiplayer.
+/* T2MPFix: fixes for Thief 2 NewDark 1.29 multiplayer, as independent modules (see fixes.h):
+ *  - smooth remote players: send_fix (fix_send.c) + recv_fix (fix_recv.c);
+ *  - stock steering for players that aren't interpolated: steer_fix (fix_steer.c);
+ *  - the 4-player cap: max_players (fix_players.c);
+ *  - lava damage: damage_fix (fix_damage.c).
+ * This file is the core: the exe check, config, log, engine helpers, the ghost hooks the avatar fixes plug
+ * into (also used by QA telemetry), and the QA bot and network impairment.
  *
- * Stock behaviour (see games/thief-2/NOTES.md):
+ * Stock behaviour (see docs/NOTES.md):
  *  - the sender only sends a player heartbeat when the receiver's dead-reckoned guess is off by
  *    more than 4 units on an axis;
  *  - the receiver dead-reckons with gravity and a raycast that stops at walls, then *steers* the
  *    avatar's physics body toward that guess with a velocity (gain 2/s), colliding with the world
  *    on the way, and only teleports when the error exceeds 12 units.
  * Result: avatars that lag, stick on doorframes and stairs, float, sink, or vanish into walls.
- *
- * T2MPFix (all machines must run it):
- *  - send: while a player moves or turns, send a heartbeat every send_interval_ms (default 50);
- *  - receive: buffer the received states and show the remote player on the interpolated path,
- *    a fixed small delay behind, by placing the avatar there every frame with the engine's own
- *    warp, instead of steering it through local physics.
- *
- * Also: damage from local-only objects (lava) is applied again; see damage.h.
  */
 #include <windows.h>
 #include <math.h>
@@ -23,17 +21,23 @@
 #include <string.h>
 #include "MinHook.h"
 #include "engine.h"
-#include "interp.h"
-#include "damage.h"
+#include "fixes.h"
 #include "common.h"
 
 uintptr_t g_base;
+int g_hook_mask;
+
+static const fix_t *const fixes[] = { &fix_send, &fix_recv, &fix_steer, &fix_players, &fix_damage };
+#define N_FIXES (int)(sizeof fixes / sizeof fixes[0])
+static int fix_on[N_FIXES];
+
+int (*ghost_send_force)(uint8_t *lg, uint8_t *hb);
+void (*ghost_steer_pre)(uint8_t *rg, double now, int new_hb, steer_info_t *si);
+void (*ghost_steer_post)(uint8_t *rg, const float target[3], steer_info_t *si);
 
 static struct {
-    int send_fix, recv_fix, telemetry, send_interval_ms, qa, hooks;
+    int telemetry, qa;
     int net_delay_ms, net_jitter_ms, net_loss_pct, net_seed;   /* QA: impair incoming heartbeats */
-    int max_players, damage_fix;
-    interp_cfg_t ic;
     char bot[MAX_PATH];
 } cfg;
 
@@ -41,7 +45,7 @@ static FILE *g_log;
 FILE *g_tel;
 static LARGE_INTEGER g_qpf;
 static int g_local_player;          /* obj id of our player (from the local ghost table) */
-static unsigned g_forced_sends, g_frames, g_fallbacks, g_local_damage;
+static unsigned g_frames;
 int qa_local_player(void) { return g_local_player; }
 
 /* ---------- utilities ---------- */
@@ -67,8 +71,10 @@ void logf_(const char *fmt, ...)
 
 uint32_t sim_ms(void) { return *(uint32_t *)VA(A_SIM_TIME_MS); }
 
+float len3(const float *v) { return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
+
 typedef uint8_t *(__stdcall *phys_get_model_t)(int obj);   /* ret 4 */
-static float *model_pos(int obj)
+float *model_pos(int obj)
 {
     uint8_t *m = ((phys_get_model_t)VA(A_PHYS_GET_MODEL))(obj);
     return m ? (float *)(m + PM_POS) : NULL;
@@ -82,7 +88,7 @@ void command_execute(const char *cmd)
     __asm__ volatile("call *%1" : : "a"(buf), "r"(f) : "ecx", "edx", "memory", "cc");
 }
 
-static int16_t *obj_facing(int obj)
+int16_t *obj_facing(int obj)
 {
     uint8_t *tab = *(uint8_t **)VA(A_POSITION_TABLE);
     if (!tab || obj < 0 || (uint32_t)obj >= *(uint32_t *)(tab + 0x20)) return NULL;
@@ -91,7 +97,7 @@ static int16_t *obj_facing(int obj)
 }
 
 /* Unconditional placement (no "does the body fit" check), used when the engine's warp refuses. */
-static void obj_pos_update(int obj, const float *pos, const int16_t *facing)
+void obj_pos_update(int obj, const float *pos, const int16_t *facing)
 {
     void *f = VA(A_OBJ_POS_UPDATE);
     __asm__ volatile("push %3\n\tcall *%2\n\tadd $4, %%esp"
@@ -118,36 +124,12 @@ void run_verb(const char *c)
     else if (strncmp(c, "mark ", 5) != 0) command_execute(c);
 }
 
-/* Player cap. Stock NewDark keeps 4 but a 4th joiner gets other players kicked; Figgis found the cap
- * must be set to N+1 for N players (systemshock.org topic 12190). Applied once from the menu tick. */
-static void apply_max_players(void)
-{
-    static int done;
-    if (done || cfg.max_players <= 0) return;
-    void **agg = *(void ***)VA(A_APP_AGGREGATE);
-    if (!agg) return;
-    done = 1;
-    typedef long(__stdcall * qi_t)(void *, const void *, void **);
-    typedef unsigned long(__stdcall * rel_t)(void *);
-    typedef void(__stdcall * setmax_t)(void *, int);
-    void **nm = NULL;
-    if (((qi_t)((void **)*agg)[0])(agg, VA(A_IID_NETMANAGER), (void **)&nm) != 0 || !nm) {
-        logf_("max_players: net manager not found");
-        return;
-    }
-    void **vt = (void **)*nm;
-    if ((uintptr_t)vt != (uintptr_t)VA(A_NETMANAGER_VTABLE)) {
-        logf_("max_players: unexpected vtable %p, not changing anything", (void *)vt);
-    } else {
-        int before = FLD(nm, NETMAN_MAXPLAYERS, int);
-        ((setmax_t)vt[NETMAN_SLOT_SETMAX])(nm, cfg.max_players + 1);
-        logf_("max_players: %d players (cap field %d -> %d)", cfg.max_players, before, FLD(nm, NETMAN_MAXPLAYERS, int));
-    }
-    ((rel_t)((void **)*nm)[2])(nm);
-}
-
 /* Called from the message loop hook (menus and in game). */
-void game_tick(void) { apply_max_players(); }
+void game_tick(void)
+{
+    for (int i = 0; i < N_FIXES; i++)
+        if (fix_on[i] && fixes[i]->tick) fixes[i]->tick();
+}
 
 /* ---------- bot: timed engine commands, for automated QA ---------- */
 
@@ -189,56 +171,6 @@ static void bot_tick(void)
     if (bot_next == bot_n && bot_loop_ms > 0 && t - bot_t0 >= bot_loop_ms) { bot_t0 = t; bot_next = 0; }
 }
 
-/* ---------- per remote player state ---------- */
-
-static float len3(const float *v) { return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
-
-typedef struct {
-    int obj;
-    uint16_t seq;
-    uint32_t recv_ms;
-    int fast;            /* sender proven to run T2MPFix (high heartbeat rate while moving) */
-    interp_t buf;
-} rstate_t;
-
-static rstate_t rs[16];
-
-/* A player without T2MPFix sends ~1.3 heartbeats/s while moving, one with it ~16/s (14+ even with 10% loss
- * and heavy jitter; stock bursts on state changes but never beats its 100 ms minimum interval). Interpolating the
- * sparse stock stream would cut corners, so keep stock behaviour for that player. Decide on the rate over the
- * last 1.5 s of buffered snapshots while the player moves. */
-static void classify_sender(rstate_t *st, double now)
-{
-    interp_t *b = &st->buf;
-    if (b->count < 2) return;
-    const snap_t *last = &b->s[(b->head + b->count - 1) % INTERP_SLOTS];
-    if (len3(last->vel) < 1.0f) return;                     /* standing still: no evidence either way */
-    int n = 0;
-    double oldest = now;
-    for (int i = 0; i < b->count; i++) {
-        const snap_t *x = &b->s[(b->head + i) % INTERP_SLOTS];
-        if (x->t_ms >= now - 1500) n++;
-        if (x->t_ms < oldest) oldest = x->t_ms;
-    }
-    if (n >= 18) st->fast = 1;   /* >= 12/s: stock can't reach this (100 ms minimum interval for players) */
-    else if (oldest <= now - 1500 && n <= 4) st->fast = 0;    /* <= 2.7/s with 1.5 s of history */
-}
-
-static rstate_t *rstate(int obj)
-{
-    rstate_t *free_ = NULL;
-    for (int i = 0; i < 16; i++) {
-        if (rs[i].obj == obj) return &rs[i];
-        if (!rs[i].obj && !free_) free_ = &rs[i];
-    }
-    if (!free_) free_ = &rs[(unsigned)obj % 16];
-    memset(free_, 0, sizeof *free_);
-    free_->obj = obj;
-    free_->seq = 0xffff;
-    free_->recv_ms = 0xffffffff;
-    return free_;
-}
-
 /* ---------- QA network impairment: delay, jitter and drop incoming ghost heartbeats ----------
  * The game's transport is DirectPlay (no plain socket imports), so instead of a UDP relay the
  * impairment sits in front of the stock heartbeat receiver. Both machines apply it, so each
@@ -253,11 +185,12 @@ static int pend_n;
 static uint32_t rng_state;
 static unsigned net_dropped, net_delayed;
 
+static int netsim_on(void) { return cfg.net_delay_ms || cfg.net_jitter_ms || cfg.net_loss_pct; }
+
 static uint32_t rng(void) { rng_state ^= rng_state << 13; rng_state ^= rng_state >> 17; rng_state ^= rng_state << 5; return rng_state; }
 
 static void __cdecl hk_recv_hb(int obj, int seq, int relobj, uint8_t *hb, int16_t *extra)
 {
-    if (!cfg.net_delay_ms && !cfg.net_jitter_ms && !cfg.net_loss_pct) { o_recv_hb(obj, seq, relobj, hb, extra); return; }
     if (!rng_state) rng_state = (uint32_t)cfg.net_seed * 2654435761u + 1;
     if ((int)(rng() % 100) < cfg.net_loss_pct) { net_dropped++; return; }
     if (pend_n == 256) { net_dropped++; return; }
@@ -285,7 +218,9 @@ static void netsim_deliver(void)
     }
 }
 
-/* ---------- hooks ---------- */
+/* ---------- ghost hooks: telemetry, local player, and the avatar fixes' extension points ---------- */
+
+static void tel_remote_frame(int after);
 
 typedef void(__cdecl *ghost_frame_t)(int dt_ms);
 typedef int(__cdecl *send_decide_t)(uint8_t *lg, uint8_t *hb);
@@ -299,7 +234,9 @@ static steer_t o_steer;
 static void __cdecl hk_ghost_frame(int dt_ms)
 {
     if (o_recv_hb) netsim_deliver();
+    if (g_tel && !o_steer) tel_remote_frame(0);
     o_ghost_frame(dt_ms);
+    if (g_tel && !o_steer) tel_remote_frame(1);
     g_frames++;
     bot_tick();
     if (g_tel && g_local_player) {
@@ -309,26 +246,13 @@ static void __cdecl hk_ghost_frame(int dt_ms)
     if (g_tel && (g_frames % 120) == 0) fflush(g_tel);
 }
 
-
 static int __cdecl hk_send_decide(uint8_t *lg, uint8_t *hb)
 {
     int r = o_send_decide(lg, hb);
     if ((FLD(lg, LG_FLAGS, uint32_t) & GF_TYPE_MASK) != GF_TYPE_PLAYER) return r;
     int obj = FLD(lg, LG_OBJ, int);
     if (g_local_player != obj) { g_local_player = obj; logf_("local player obj %d", obj); }
-    if (r || !cfg.send_fix) return r;
-
-    float *mp = model_pos(obj);
-    if (!mp || memcmp(hb + HB_POS, mp, 12) != 0) return r;   /* heartbeat not filled in */
-    if (sim_ms() - FLD(lg, LG_LAST_SEND_MS, uint32_t) < (uint32_t)cfg.send_interval_ms) return r;
-
-    float *pos = (float *)(hb + HB_POS), *vel = (float *)(hb + HB_VEL);
-    float *spos = (float *)(lg + LG_SENT + HB_POS), *svel = (float *)(lg + LG_SENT + HB_VEL);
-    float d[3] = { pos[0] - spos[0], pos[1] - spos[1], pos[2] - spos[2] };
-    int moved = len3(d) > 0.02f;
-    int moving = len3(vel) > 0.05f || len3(svel) > 0.05f;      /* includes the final "stopped" */
-    int turned = FLD(hb, HB_HEADING, uint16_t) != FLD(lg, LG_SENT + HB_HEADING, uint16_t);
-    if (moved || moving || turned) { g_forced_sends++; return 1; }
+    if (!r && ghost_send_force) r = ghost_send_force(lg, hb);
     return r;
 }
 
@@ -342,104 +266,110 @@ static void __cdecl hk_send(uint8_t *lg, uint8_t *hb)
     }
 }
 
+/* Last heartbeat seen per remote player, to tell a new one from a repeat. */
+static struct { int obj; uint16_t seq; uint32_t recv_ms; } seen[16];
+
+static int new_heartbeat(int obj, uint16_t seq, uint32_t rms)
+{
+    int slot = -1;
+    for (int i = 0; i < 16 && slot < 0; i++)
+        if (seen[i].obj == obj) slot = i;
+    for (int i = 0; i < 16 && slot < 0; i++)
+        if (!seen[i].obj) slot = i;
+    if (slot < 0) slot = (unsigned)obj % 16;
+    if (seen[slot].obj == obj && seen[slot].seq == seq && seen[slot].recv_ms == rms) return 0;
+    seen[slot].obj = obj;
+    seen[slot].seq = seq;
+    seen[slot].recv_ms = rms;
+    return 1;
+}
+
+static void tel_heartbeat(uint8_t *rg, double t)
+{
+    float *info = (float *)(rg + RG_INFO + HB_POS);
+    fprintf(g_tel, "H,%.3f,%u,%d,%u,%.3f,%.3f,%.3f,%04x,%u\n", t, sim_ms(), FLD(rg, RG_OBJ, int), FLD(rg, RG_SEQ, uint16_t),
+            info[0], info[1], info[2], FLD(rg, RG_INFO + HB_FLAGS, uint16_t), FLD(rg, RG_INFO + HB_MODE, uint8_t));
+}
+
+static void tel_steer(uint8_t *rg, uint32_t flags, double t, const float before[3], const float target[3],
+                      const steer_info_t *si)
+{
+    int obj = FLD(rg, RG_OBJ, int);
+    float *mp = model_pos(obj);
+    fprintf(g_tel, "R,%.3f,%u,%d,%08x,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%.1f,%d\n", t, sim_ms(), obj,
+            flags, before[0], before[1], before[2], mp ? mp[0] : 0, mp ? mp[1] : 0, mp ? mp[2] : 0, target[0],
+            target[1], target[2], si->fixed, si->mode, si->delay_ms, si->fallback);
+}
+
+/* Telemetry without hooking the steer function: walk the remote ghost table around the stock ghost frame.
+ * Pass 0 (before) keeps each player's position, pass 1 (after) writes the H and R lines. */
+static void tel_remote_frame(int after)
+{
+    static struct { int obj; float pos[3]; uint32_t flags; } pre[16];
+    static int n_pre;
+    uint8_t *hash = VA(A_REMOTE_GHOSTS);
+    uint8_t ***buckets = *(uint8_t ****)(hash + 4);
+    uint32_t n = *(uint32_t *)(hash + 8);
+    if (!after) n_pre = 0;
+    double t = now_ms();
+    for (uint32_t i = 0; buckets && i < n; i++) {
+        for (uint8_t **node = buckets[i]; node; node = (uint8_t **)node[1]) {
+            uint8_t *rg = node[0];
+            if (!rg || (FLD(rg, RG_FLAGS, uint32_t) & GF_TYPE_MASK) != GF_TYPE_PLAYER) continue;
+            int obj = FLD(rg, RG_OBJ, int);
+            float *mp = model_pos(obj);
+            if (!after) {
+                if (n_pre < 16 && mp) {
+                    pre[n_pre].obj = obj;
+                    memcpy(pre[n_pre].pos, mp, 12);
+                    pre[n_pre].flags = FLD(rg, RG_FLAGS, uint32_t);
+                    n_pre++;
+                }
+                continue;
+            }
+            int k = 0;
+            while (k < n_pre && pre[k].obj != obj) k++;
+            if (k == n_pre) continue;                        /* new this frame */
+            if (new_heartbeat(obj, FLD(rg, RG_SEQ, uint16_t), FLD(rg, RG_RECV_MS, uint32_t))) tel_heartbeat(rg, t);
+            steer_info_t si = { 0, -1, 0, 0.0 };
+            tel_steer(rg, pre[k].flags, t, pre[k].pos, (float *)(rg + RG_PRED + HB_POS), &si);
+        }
+    }
+}
+
 static void __cdecl hk_steer(uint8_t *rg, float dt)
 {
     uint32_t flags = FLD(rg, RG_FLAGS, uint32_t);
     if ((flags & GF_TYPE_MASK) != GF_TYPE_PLAYER) { o_steer(rg, dt); return; }
 
     int obj = FLD(rg, RG_OBJ, int);
-    rstate_t *st = rstate(obj);
     double t = now_ms();
-    uint16_t seq = FLD(rg, RG_SEQ, uint16_t);
-    uint32_t rms = FLD(rg, RG_RECV_MS, uint32_t);
-    float *info = (float *)(rg + RG_INFO + HB_POS);
-
-    if (seq != st->seq || rms != st->recv_ms) {
-        snap_t s;
-        s.t_ms = t;
-        memcpy(s.pos, info, 12);
-        memcpy(s.vel, rg + RG_INFO + HB_VEL, 12);
-        s.heading = FLD(rg, RG_INFO + HB_HEADING, uint16_t);
-        s.relobj = FLD(rg, RG_RELOBJ, int32_t);
-        interp_push(&st->buf, &cfg.ic, &s);
-        classify_sender(st, t);
-        st->seq = seq;
-        st->recv_ms = rms;
-        if (g_tel)
-            fprintf(g_tel, "H,%.3f,%u,%d,%u,%.3f,%.3f,%.3f,%04x,%u\n", t, sim_ms(), obj, seq, info[0], info[1], info[2],
-                    FLD(rg, RG_INFO + HB_FLAGS, uint16_t), FLD(rg, RG_INFO + HB_MODE, uint8_t));
-    }
+    int new_hb = new_heartbeat(obj, FLD(rg, RG_SEQ, uint16_t), FLD(rg, RG_RECV_MS, uint32_t));
+    if (new_hb && g_tel) tel_heartbeat(rg, t);
 
     float *mp = model_pos(obj);
     float before[3] = { 0, 0, 0 };
     if (mp) memcpy(before, mp, 12);
 
-    interp_out_t o;
-    int fixed = 0;
-    /* A player without T2MPFix sends ~1/s; interpolating that would cut corners, so keep stock for them. */
-    if (cfg.recv_fix && st->fast && interp_sample(&st->buf, &cfg.ic, t, &o) &&
-        o.relobj == FLD(rg, RG_RELOBJ, int32_t)) {
-        memcpy(rg + RG_PRED + HB_POS, o.pos, 12);
-        memcpy(rg + RG_PRED + HB_VEL, o.vel, 12);
-        FLD(rg, RG_PRED + HB_HEADING, uint16_t) = o.heading;
-        FLD(rg, RG_FLAGS, uint32_t) |= RGF_FORCE_WARP;          /* stock code warps to pred */
-        fixed = 1;
-    }
+    steer_info_t si = { 0, -1, 0, 0.0 };
+    if (ghost_steer_pre) ghost_steer_pre(rg, t, new_hb, &si);
     float *pred = (float *)(rg + RG_PRED + HB_POS);
     float target[3] = { pred[0], pred[1], pred[2] };
 
     o_steer(rg, dt);
 
-    int fallback = 0;
-    mp = model_pos(obj);
-    if (fixed && mp && FLD(rg, RG_RELOBJ, int32_t) == 0) {
-        float d[3] = { mp[0] - target[0], mp[1] - target[1], mp[2] - target[2] };
-        int16_t *fac = obj_facing(obj);
-        if (len3(d) > 0.5f && fac) {
-            int16_t keep[3] = { fac[0], fac[1], fac[2] };
-            obj_pos_update(obj, target, keep);
-            fallback = 1;
-            g_fallbacks++;
-        }
-    }
-
-    if (g_tel) {
-        fprintf(g_tel, "R,%.3f,%u,%d,%08x,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%.1f,%d\n", t, sim_ms(), obj,
-                flags, before[0], before[1], before[2], mp ? mp[0] : 0, mp ? mp[1] : 0, mp ? mp[2] : 0, target[0],
-                target[1], target[2], fixed, fixed ? o.mode : -1, fixed ? o.delay_ms : 0.0, fallback);
-    }
-}
-
-typedef int(__stdcall *damage_filter_t)(int victim, int culprit, void *msg, void *data);
-typedef int(__stdcall *objnet_pred_t)(void *self, int obj);
-static damage_filter_t o_damage_filter;
-
-static int objnet(void *on, int slot, int obj) { return ((objnet_pred_t)(*(void ***)on)[slot / 4])(on, obj); }
-
-/* The engine zeroes damage from local-only culprits (lava) for every victim; let it through for victims
- * this machine hosts, and leave everything else to the engine. */
-static int __stdcall hk_damage_filter(int victim, int culprit, void *msg, void *data)
-{
-    void *on = *(void **)VA(A_OBJ_NETWORKING);
-    if (on && culprit && victim &&
-        local_damage_allowed(objnet(on, OBJNET_LOCAL_ONLY, culprit), objnet(on, OBJNET_IS_PROXY, victim),
-                             objnet(on, OBJNET_HOSTED_HERE, victim))) {
-        g_local_damage++;
-        return 0;
-    }
-    return o_damage_filter(victim, culprit, msg, data);
+    if (ghost_steer_post) ghost_steer_post(rg, target, &si);
+    if (g_tel) tel_steer(rg, flags, t, before, target, &si);
 }
 
 /* ---------- setup ---------- */
 
-static int sig_ok(uintptr_t va, const char *sig, size_t n)
+int sig_ok(uintptr_t va, const char *sig, size_t n)
 {
     return memcmp(VA(va), sig, n) == 0;
 }
-#define SIG(va, s) sig_ok(va, s, sizeof(s) - 1)
 
-/* Signature whose bytes 1..4 are an absolute address (relocated by the loader). */
-static int sig_rebased(uintptr_t va, const char *sig, size_t n)
+int sig_rebased(uintptr_t va, const char *sig, size_t n)
 {
     char buf[32];
     memcpy(buf, sig, n);
@@ -448,33 +378,14 @@ static int sig_rebased(uintptr_t va, const char *sig, size_t n)
     return memcmp(VA(va), buf, n) == 0;
 }
 
-static void load_config(const char *dir)
+const char *sig_mismatch(uintptr_t va)
 {
-    char ini[MAX_PATH];
-    snprintf(ini, sizeof ini, "%sT2MPFix.ini", dir);
-    cfg.send_fix = GetPrivateProfileIntA("T2MPFix", "send_fix", 1, ini);
-    cfg.recv_fix = GetPrivateProfileIntA("T2MPFix", "recv_fix", 1, ini);
-    cfg.telemetry = GetPrivateProfileIntA("T2MPFix", "telemetry", 0, ini);
-    cfg.send_interval_ms = GetPrivateProfileIntA("T2MPFix", "send_interval_ms", 50, ini);
-    cfg.ic.delay_min_ms = GetPrivateProfileIntA("T2MPFix", "delay_min_ms", 60, ini);
-    cfg.ic.delay_max_ms = GetPrivateProfileIntA("T2MPFix", "delay_max_ms", 300, ini);
-    cfg.ic.nominal_gap_ms = cfg.send_interval_ms;
-    cfg.ic.max_extrap_ms = GetPrivateProfileIntA("T2MPFix", "max_extrap_ms", 100, ini);
-    cfg.ic.snap_dist = (float)GetPrivateProfileIntA("T2MPFix", "snap_dist", 20, ini);
-    cfg.max_players = GetPrivateProfileIntA("T2MPFix", "max_players", 0, ini);
-    cfg.damage_fix = GetPrivateProfileIntA("T2MPFix", "damage_fix", 1, ini);
-    cfg.qa = GetPrivateProfileIntA("qa", "enable", 0, ini);
-    cfg.hooks = GetPrivateProfileIntA("qa", "hooks", 31, ini);   /* bisecting aid */
-    cfg.net_delay_ms = GetPrivateProfileIntA("qa", "net_delay_ms", 0, ini);
-    cfg.net_jitter_ms = GetPrivateProfileIntA("qa", "net_jitter_ms", 0, ini);
-    cfg.net_loss_pct = GetPrivateProfileIntA("qa", "net_loss_pct", 0, ini);
-    cfg.net_seed = GetPrivateProfileIntA("qa", "net_seed", 1, ini);
-    char bot[MAX_PATH] = "";
-    GetPrivateProfileStringA("qa", "bot", "", bot, sizeof bot, ini);
-    if (bot[0]) snprintf(cfg.bot, sizeof cfg.bot, "%s%s", dir, bot);
+    static char buf[64];
+    snprintf(buf, sizeof buf, "signature mismatch at %#x, left stock", (unsigned)va);
+    return buf;
 }
 
-static int hook(uintptr_t va, void *det, void **orig, const char *name)
+int hook(uintptr_t va, void *det, void **orig, const char *name)
 {
     MH_STATUS s = MH_CreateHook(VA(va), det, orig);
     if (s == MH_OK) s = MH_EnableHook(VA(va));
@@ -483,6 +394,41 @@ static int hook(uintptr_t va, void *det, void **orig, const char *name)
     logf_("hook %-14s %#x: %s, trampoline %p protect %#lx", name, (unsigned)va, MH_StatusToString(s), *orig,
           (unsigned long)mbi.Protect);
     return s == MH_OK;
+}
+
+int patch_bytes(uintptr_t va, const void *bytes, size_t n)
+{
+    DWORD old;
+    if (!VirtualProtect(VA(va), n, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    memcpy(VA(va), bytes, n);
+    VirtualProtect(VA(va), n, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), VA(va), n);
+    logf_("patch %#x: %u bytes", (unsigned)va, (unsigned)n);
+    return 1;
+}
+
+/* A core ghost hook, if something needs it and its bytes match. */
+static void ghost_hook(unsigned need, unsigned bit, uintptr_t va, const char *sig, size_t n, void *det, void **orig,
+                       const char *name)
+{
+    if (!(need & bit)) return;
+    if (!sig_ok(va, sig, n)) { logf_("hook %-14s %#x: signature mismatch, not hooked", name, (unsigned)va); return; }
+    hook(va, det, orig, name);
+}
+#define GHOST_HOOK(need, bit, va, sig, det, orig, name) ghost_hook(need, bit, va, sig, sizeof(sig) - 1, det, (void **)orig, name)
+
+static void load_config(const char *ini, const char *dir)
+{
+    cfg.telemetry = GetPrivateProfileIntA("T2MPFix", "telemetry", 0, ini);
+    cfg.qa = GetPrivateProfileIntA("qa", "enable", 0, ini);
+    g_hook_mask = GetPrivateProfileIntA("qa", "hooks", 31, ini);   /* bisecting aid */
+    cfg.net_delay_ms = GetPrivateProfileIntA("qa", "net_delay_ms", 0, ini);
+    cfg.net_jitter_ms = GetPrivateProfileIntA("qa", "net_jitter_ms", 0, ini);
+    cfg.net_loss_pct = GetPrivateProfileIntA("qa", "net_loss_pct", 0, ini);
+    cfg.net_seed = GetPrivateProfileIntA("qa", "net_seed", 1, ini);
+    char bot[MAX_PATH] = "";
+    GetPrivateProfileStringA("qa", "bot", "", bot, sizeof bot, ini);
+    if (bot[0]) snprintf(cfg.bot, sizeof cfg.bot, "%s%s", dir, bot);
 }
 
 static void init(void)
@@ -499,46 +445,64 @@ static void init(void)
         return;   /* not the 1.29 MP exe (e.g. single-player thief2.exe): stay a plain dinput proxy */
 
     QueryPerformanceFrequency(&g_qpf);
-    load_config(dir);
-    char path[MAX_PATH];
+    char ini[MAX_PATH], path[MAX_PATH];
+    snprintf(ini, sizeof ini, "%sT2MPFix.ini", dir);
+    load_config(ini, dir);
     snprintf(path, sizeof path, "%sT2MPFix.log", dir);
     g_log = fopen(path, "w");
-    logf_("T2MPFix 0.1 on Thief2MP 1.29, base %p; send_fix=%d recv_fix=%d damage_fix=%d interval=%d telemetry=%d",
-          (void *)g_base, cfg.send_fix, cfg.recv_fix, cfg.damage_fix, cfg.send_interval_ms, cfg.telemetry);
+    logf_("T2MPFix 0.1 on Thief2MP 1.29, base %p; telemetry=%d qa=%d hooks=%d", (void *)g_base, cfg.telemetry,
+          cfg.qa, g_hook_mask);
+    if (MH_Initialize() != MH_OK) { logf_("MH_Initialize failed"); return; }
 
-    if (!SIG(A_GHOST_FRAME, SIG_GHOST_FRAME) || !SIG(A_SEND_DECIDE, SIG_SEND_DECIDE) || !SIG(A_SEND, SIG_SEND) ||
-        !SIG(A_REMOTE_STEER, SIG_REMOTE_STEER) || !SIG(A_PHYS_GET_MODEL, SIG_PHYS_GET_MODEL) ||
-        !sig_rebased(A_OBJ_POS_UPDATE, SIG_OBJ_POS_UPDATE, sizeof(SIG_OBJ_POS_UPDATE) - 1)) {
-        logf_("signature mismatch: not hooking anything");
-        return;
+    /* Each fix decides on its own: a missing switch or a signature mismatch only turns that fix off. */
+    char active[128] = "";
+    int any_tick = 0;
+    for (int i = 0; i < N_FIXES; i++) {
+        const char *why = fixes[i]->init(ini);
+        fix_on[i] = why == NULL;
+        logf_("%s: %s", fixes[i]->name, why ? why : "on");
+        if (fix_on[i]) {
+            strcat(active, " ");
+            strcat(active, fixes[i]->name);
+            any_tick |= fixes[i]->tick != NULL;
+        }
     }
+    logf_("active:%s", active[0] ? active : " none (stock game)");
+
     if (cfg.telemetry) {
         snprintf(path, sizeof path, "%sT2MPFix_tel.csv", dir);
         g_tel = fopen(path, "w");
         if (g_tel) setvbuf(g_tel, NULL, _IOFBF, 1 << 16);
     }
     bot_load();
-    if (MH_Initialize() != MH_OK) { logf_("MH_Initialize failed"); return; }
-    if (cfg.hooks & 1) hook(A_GHOST_FRAME, hk_ghost_frame, (void **)&o_ghost_frame, "ghost_frame");
-    if (cfg.hooks & 2) hook(A_SEND_DECIDE, hk_send_decide, (void **)&o_send_decide, "send_decide");
-    if (cfg.hooks & 4) hook(A_SEND, hk_send, (void **)&o_send, "send");
-    if (cfg.hooks & 8) hook(A_REMOTE_STEER, hk_steer, (void **)&o_steer, "remote_steer");
-    if (cfg.damage_fix && (cfg.hooks & 16) && SIG(A_NET_DAMAGE_FILTER, SIG_NET_DAMAGE_FILTER))
-        hook(A_NET_DAMAGE_FILTER, hk_damage_filter, (void **)&o_damage_filter, "damage_filter");
-    if ((cfg.net_delay_ms || cfg.net_jitter_ms || cfg.net_loss_pct) && SIG(A_RECV_HEARTBEAT, SIG_RECV_HEARTBEAT)) {
+    unsigned need = ghost_hooks_needed(ghost_send_force != NULL, ghost_steer_pre != NULL, cfg.telemetry, cfg.qa,
+                                       bot_n > 0, netsim_on()) & (unsigned)g_hook_mask;
+    if ((need & (HK_GHOST_FRAME | HK_SEND_DECIDE | HK_STEER)) && !SIG(A_PHYS_GET_MODEL, SIG_PHYS_GET_MODEL)) {
+        logf_("%s, ghost hooks not installed", sig_mismatch(A_PHYS_GET_MODEL));
+        need = 0;
+    }
+    GHOST_HOOK(need, HK_GHOST_FRAME, A_GHOST_FRAME, SIG_GHOST_FRAME, hk_ghost_frame, &o_ghost_frame, "ghost_frame");
+    GHOST_HOOK(need, HK_SEND_DECIDE, A_SEND_DECIDE, SIG_SEND_DECIDE, hk_send_decide, &o_send_decide, "send_decide");
+    GHOST_HOOK(need, HK_SEND, A_SEND, SIG_SEND, hk_send, &o_send, "send");
+    GHOST_HOOK(need, HK_STEER, A_REMOTE_STEER, SIG_REMOTE_STEER, hk_steer, &o_steer, "remote_steer");
+    if (ghost_send_force && !o_send_decide) { ghost_send_force = NULL; logf_("send_fix: hook failed, off"); }
+    if (ghost_steer_pre && !o_steer) { ghost_steer_pre = NULL; ghost_steer_post = NULL; logf_("recv_fix: hook failed, off"); }
+    if (netsim_on() && o_ghost_frame && SIG(A_RECV_HEARTBEAT, SIG_RECV_HEARTBEAT)) {
         hook(A_RECV_HEARTBEAT, hk_recv_hb, (void **)&o_recv_hb, "recv_heartbeat");
         logf_("netsim: delay %d ms, jitter +-%d ms, loss %d%%, seed %d", cfg.net_delay_ms, cfg.net_jitter_ms,
               cfg.net_loss_pct, cfg.net_seed);
     }
-    qa_init(dir, cfg.qa);
+    if (cfg.qa || any_tick) qa_init(dir, cfg.qa, any_tick);
 }
 
 static void shutdown_(void)
 {
-    logf_("exit: frames %u, forced sends %u, placement fallbacks %u, local-only damage %u, netsim delayed %u dropped %u",
-          g_frames, g_forced_sends, g_fallbacks, g_local_damage, net_delayed, net_dropped);
+    if (!g_log) return;
+    for (int i = 0; i < N_FIXES; i++)
+        if (fix_on[i] && fixes[i]->exit) fixes[i]->exit();
+    logf_("exit: frames %u, netsim delayed %u dropped %u", g_frames, net_delayed, net_dropped);
     if (g_tel) fclose(g_tel);
-    if (g_log) fclose(g_log);
+    fclose(g_log);
 }
 
 BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID reserved)

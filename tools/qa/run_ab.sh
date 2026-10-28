@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A/B test: one moving player (bot), one observer; same session flow for every mode.
-#   run_ab.sh <seconds> <mode>...       modes: stock fixed send_only recv_only
+#   run_ab.sh <seconds> <mode>...       modes: stock fixed send_only recv_only steer_only
 # Results: tools/qa/results/<stamp>_<mode>/{host,client1}_tel.csv and summary.json
 set -uo pipefail
 test=${T2_TEST_DIR:-/mnt/d/thief_coop_test}
@@ -9,14 +9,21 @@ secs=$1; shift
 mover=${MOVER:-client1}   # which lane runs the walker bot
 stamp=$(date +%Y%m%d_%H%M%S)
 for mode in "$@"; do
-  out=results/${stamp}_${mode}_${mover}${NETSIM:+_net${NETSIM//,/-}}
+  out=results/${stamp}_${mode}_${mover}${NETSIM:+_net${NETSIM//,/-}}${STEER:+_steer$STEER}
   mkdir -p "$out"
   python3 -I lanes.py kill
   if [ "$mover" = host ]; then bots="host:walker client1:idle"; else bots="host:idle client1:walker"; fi
-  python3 -I lanes.py setup "$mode" $bots >/dev/null
-  python3 -I lanes.py launch host client1 >/dev/null
-  python3 -I lanes.py start_session host client1 >/dev/null
-  if ! python3 -I lanes.py wait_ingame host client1 60; then echo "$mode: session did not start"; continue; fi
+  started=0
+  for try in 1 2; do    # injected menu clicks are occasionally dropped; relaunch once
+    python3 -I lanes.py kill
+    python3 -I lanes.py setup "$mode" $bots >/dev/null
+    python3 -I lanes.py launch host client1 >/dev/null
+    python3 -I lanes.py start_session host client1 >/dev/null
+    if python3 -I lanes.py wait_ingame host client1 60; then started=1; break; fi
+    python3 -I lanes.py shot host "${stamp}_${mode}_nostart${try}_host" >/dev/null
+    python3 -I lanes.py shot client1 "${stamp}_${mode}_nostart${try}_client1" >/dev/null
+  done
+  if [ $started = 0 ]; then echo "$mode: session did not start"; continue; fi
   python3 -I - "$secs" <<'EOF'
 import sys, time
 time.sleep(float(sys.argv[1]))
