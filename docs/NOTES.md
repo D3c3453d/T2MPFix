@@ -236,7 +236,8 @@ Verified: host and client each die within ~2 s in the Soulforge lava; the other 
 
 - The game transport: no sendto/recvfrom/bind imports, so likely DirectPlay (not verified).
 - Remote players on elevators and moving platforms (heartbeats relative to an object fall back to stock steering),
-  ladders, rope arrows, swimming, saves/loads, mission changes, fan missions: not tested.
+  ladders, rope arrows, mantling, swimming, saves/loads, mission changes, fan missions, a session over the
+  Internet (network impairment was only simulated in the DLL): not tested.
 
 Resolved: player heartbeat rate and warp threshold (see "Derived"); several `Thief2MP.exe` instances run on one PC
 (tested with 4).
