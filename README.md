@@ -7,7 +7,7 @@ Four separate fixes for Thief II multiplayer, each with its own switch in `T2MPF
    vanishing).
 2. **Stock steering bug** (`steer_fix`): players that fix 1 doesn't cover (those without T2MPFix) no longer
    drift several units behind, caused by an uninitialized read in the engine's steering code.
-3. **Player limit** (`max_players`): as many players as you set can join; stock's cap is off by one, so the
+3. **Player limit** (`max_players`): as many players as you set can join, up to 8; stock's cap is off by one, so the
    last player to join drops others. Example: a 4th player joining kicks two others.
 4. **Environmental damage** (`damage_fix`): hazards each game runs locally hurt players again; stock
    multiplayer drops their damage. Example: lava does nothing.
@@ -69,7 +69,7 @@ turn `recv_fix` off. Such a player's path deviation: p95 6.5 / max 7.7 units wit
 
 | Key | Default | What it does |
 |---|---|---|
-| `max_players` | 4 (0 in code) | Lets N players join: the host sets the engine's player cap to N+1 (Figgis's finding). At the stock cap the last player to join gets others kicked. Example: stock keeps 4, so a 4th joiner kicks two others. 0 = leave stock. Tested with all four players set to 4 |
+| `max_players` | 8 (0 in code) | Lets N players join: the host sets the engine's player cap to N+1 (Figgis's finding). At the stock cap the last player to join gets others kicked. Example: stock keeps 4, so a 4th joiner kicks two others. 0 = leave stock. At most 8 (higher values are clamped): the game's DirectPlay session holds 8, and a 9th player waits at "Joining Game..." forever without disturbing anyone. Only the host's value matters. Tested with 4, 5 and 8 players |
 
 ### 4. Environmental damage: `damage_fix`
 
@@ -133,6 +133,8 @@ ALL PASS
 Each fix on its own, with every other fix off:
 - `max_players=4`: 4 instances all join and play; with `max_players=0` the 4th joiner drops the others
   ("Network Connection Lost!" while the host waits forever).
+- `max_players=5` and `=8`: 5 and 8 instances play mission 1, each seeing all the others every second for 60 s; a 9th
+  instance stays at "Joining Game..." and drops no one, even with the clamp removed (`tools/qa/players.sh`).
 - `damage_fix=1`: on Soulforge (mission 15) the player dies in the lava; with `damage_fix=0` they stand in it at
   full health (`tools/qa/lava.sh`).
 - With all fixes off (and QA off), nothing is hooked or patched; the game runs as stock.

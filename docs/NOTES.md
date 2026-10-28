@@ -125,6 +125,15 @@ PASS mixed (mover without fix)    travelled  257.3  path_dev p95 2.438 max 3.124
 - Each fix alone, every other fix off:
   - `max_players=4`: 4 instances in mission 1 for 60+ s, the host sees 3 remote players every frame. Control with
     `max_players=0`: client1 "Network Connection Lost!" in the lobby, host and client3 stuck at "Waiting...".
+  - `tools/qa/players.sh` (2026-10-29, `070f9688…`, every other fix off): `players.sh 5` and `players.sh 8 client8`
+    PASS. The lobby lists 8; in mission 1 every lane sees exactly N-1 remote players in each second of 60 s; host log
+    `cap field 4 -> 9`. The 9th (client8) stays on "Joining Game..." (no error shown), never gets in, nobody drops.
+    About 480 MB of RAM per instance in the mission; 9 instances left 1.2 GB free of 15 GB.
+  - Without the clamp (= the v0.2 DLL `148633d5…`), `max_players=9`, 9 instances: cap field 4 -> 10, yet the lobby
+    stops at 8. The 9th sits on "Joining Game..." for 2+ minutes with no error (its loop still runs) while the 8 start
+    the mission and each sees exactly 7 remote players for 60 s. DirectPlay's 8 is the real limit; the clamp only
+    makes the log say so.
+  - Shipped default `max_players=8` with a usual group: `MAXP=8 players.sh 4` PASS (cap 4 -> 9, each lane sees 3).
   - `damage_fix=1` (`tools/qa/lava.sh 1`): host alone on Soulforge walks into the lava; log shows damage from obj 1739
     (`Water Flow Group`) to the player, "Host has died". `damage_fix=0`: standing in the lava at full health.
   - Startup log for all on, each one off, and all off: each off fix logs "off in T2MPFix.ini" and installs nothing;
@@ -161,6 +170,10 @@ The game transport is DirectPlay: Windows offers to install DirectPlay on the ga
 - Player cap: `cNetManager` field +0x136 (default 4 written at `0x438d39`), `SetMaxPlayers` = vtable slot 40
   (`0x43a230`, stdcall). Stock lobby with 4 instances: Client3 joining kicked Client1 and Client2 (reproduced).
   With the cap set to 5: all 4 stay and play.
+- Upper bound: the host's DirectPlay8 `DPN_APPLICATION_DESC` (built at `0x68424d`: dwSize 0x48, flags 0x40 NODPNSVR)
+  has `dwMaxPlayers = 8` (`mov [ebp+0x28],8` at `0x684254`, the only such write; no SetApplicationDesc later), so
+  DirectPlay refuses a 9th peer whatever the game cap is. `max_players` is clamped to 8. The join handler
+  (`0x437c20`) sends the joiner the other players' ids in a fixed `int[8]`, fine up to 10. 5 and 8 tested live (below).
 
 ## Stock steering reads uninitialized stack (fixed by `steer_fix`)
 

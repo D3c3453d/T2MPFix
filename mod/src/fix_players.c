@@ -38,6 +38,11 @@ static const char *init(const char *ini)
 {
     max_players = GetPrivateProfileIntA("T2MPFix", "max_players", 0, ini);
     if (max_players <= 0) return "off in T2MPFix.ini (stock cap)";
+    if (max_players > DPLAY_MAX_PLAYERS) {
+        logf_("max_players: %d > %d (DirectPlay session limit), using %d", max_players, DPLAY_MAX_PLAYERS,
+              DPLAY_MAX_PLAYERS);
+        max_players = DPLAY_MAX_PLAYERS;
+    }
     return NULL;
 }
 

@@ -6,6 +6,8 @@
   python3 -I lanes.py qa <lane> "<cmd>; <cmd>; ..."                  queue QA commands (see mod/src/qa.c)
   python3 -I lanes.py shot <lane> [name]                             screen capture of that window
   python3 -I lanes.py wait_ingame <lane>... [timeout_s]              until every lane has a local player
+  python3 -I lanes.py start_session host client1...                 host a game, clients join, start mission 1
+                                                                     (the same in steps: host_lobby host, join client1..., start host)
   python3 -I lanes.py kill
 """
 import os, shutil, subprocess, sys, time
@@ -125,33 +127,45 @@ MENU = {'multiplayer': (312, 233), 'first_option': (310, 92), 'second_option': (
         'start_game': (329, 286)}
 
 
-def lobby(host='host', *clients):
-    """Main menu -> host lobby; clients join. Leaves the host in the lobby."""
-    clients = clients or ('client1',)
+def host_lobby(host='host'):
+    """Host: main menu -> multiplayer -> host a game; stays in the lobby."""
     unfocus()
     m = MENU
-    qa(host, f"click {m['multiplayer'][0]} {m['multiplayer'][1]}; wait 1500; click {m['next'][0]} {m['next'][1]}; wait 1500;"
-             f"click {m['next'][0]} {m['next'][1]}; wait 2000; status")
+    return qa(host, f"click {m['multiplayer'][0]} {m['multiplayer'][1]}; wait 1500; click {m['next'][0]} {m['next'][1]}; wait 1500;"
+                    f"click {m['next'][0]} {m['next'][1]}; wait 2000; status")
+
+
+def join(*clients, settle=3000):
+    """Clients: main menu -> multiplayer -> join 127.0.0.1, one after the other."""
+    unfocus()
+    m = MENU
     for c in clients:
         qa(c, f"click {m['multiplayer'][0]} {m['multiplayer'][1]}; wait 1500; click {m['second_option'][0]} {m['second_option'][1]};"
-              f"wait 500; click {m['next'][0]} {m['next'][1]}; wait 1500; click {m['next'][0]} {m['next'][1]}; wait 4000; status")
+              f"wait 500; click {m['next'][0]} {m['next'][1]}; wait 1500; click {m['next'][0]} {m['next'][1]}; wait {settle}; status")
+
+
+def start(host='host'):
+    """Host in the lobby: start a new game (mission 1, Normal)."""
+    unfocus()
+    m = MENU
+    qa(host, f"click {m['next'][0]} {m['next'][1]}; wait 2000; click {m['second_option'][0]} {m['second_option'][1]}; wait 2000;"
+             f"click {m['start_game'][0]} {m['start_game'][1]}; wait 2000; status")
+    print('session started')
+
+
+def lobby(host='host', *clients):
+    """Main menu -> host lobby; clients join. Leaves the host in the lobby."""
+    host_lobby(host)
+    join(*(clients or ('client1',)), settle=4000)
     print('lobby filled')
 
 
 def start_session(host='host', *clients):
     """Main menu -> host lobby; clients join 127.0.0.1; host starts a new game (mission 1, Normal)."""
-    clients = clients or ('client1',)
-    unfocus()
-    m = MENU
-    qa(host, f"click {m['multiplayer'][0]} {m['multiplayer'][1]}; wait 1500; click {m['next'][0]} {m['next'][1]}; wait 1500;"
-             f"click {m['next'][0]} {m['next'][1]}; wait 2000; status")
-    for c in clients:
-        qa(c, f"click {m['multiplayer'][0]} {m['multiplayer'][1]}; wait 1500; click {m['second_option'][0]} {m['second_option'][1]};"
-              f"wait 500; click {m['next'][0]} {m['next'][1]}; wait 1500; click {m['next'][0]} {m['next'][1]}; wait 3000; status")
+    host_lobby(host)
+    join(*(clients or ('client1',)))
     time.sleep(2)
-    qa(host, f"click {m['next'][0]} {m['next'][1]}; wait 2000; click {m['second_option'][0]} {m['second_option'][1]}; wait 2000;"
-             f"click {m['start_game'][0]} {m['start_game'][1]}; wait 2000; status")
-    print('session started')
+    start(host)
 
 
 def kill():

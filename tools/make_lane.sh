@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # Build a test lane: clean Steam copy + NewDark 1.29 + MP package, in $T2_TEST_DIR/<lane>.
 # Usage: tools/make_lane.sh <lane-name> [player-name]
-# Never touches the owner's Steam install; works from local/vanilla (a copy of it) and downloads/nd129
-# (new_dark.zip, contrib.zip, mp.zip from t2_v129.zip).
+# Never touches the owner's Steam install; works from the workspace's local/vanilla (a copy of it) and downloads/nd129
+# (new_dark.zip, contrib.zip, mp.zip from t2_v129.zip). Workspace = $T2_WORKSPACE, default two levels above the repo.
 set -euo pipefail
 lane="$1"; pname="${2:-$1}"
 root=$(cd "$(dirname "$0")/.." && pwd)
+ws=$(cd "${T2_WORKSPACE:-$root/../..}" && pwd)
 test="${T2_TEST_DIR:-/mnt/d/thief_coop_test}"   # Windows folder for the test lanes, as a WSL path
 dst="$test/$lane"
 mkdir -p "$test"
 win=$(wslpath -w "$test")\\$lane
-nd="$root/downloads/nd129"
+nd="$ws/downloads/nd129"
 
 [ -e "$dst" ] && { echo "lane exists: $dst" >&2; exit 1; }
 mkdir -p "$dst"
-cp -r "$root/local/vanilla/." "$dst/"
+cp -r "$ws/local/vanilla/." "$dst/"
 python3 -I - "$nd" "$dst" <<'EOF'
 import sys, zipfile
 nd, dst = sys.argv[1], sys.argv[2]

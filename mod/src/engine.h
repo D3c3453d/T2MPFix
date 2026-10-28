@@ -37,6 +37,7 @@ extern uintptr_t g_base;
 #define A_NETMANAGER_VTABLE  0x7d5a3c  /* cNetManager vtable; slot 40 = SetMaxPlayers(this, n) __stdcall */
 #define NETMAN_SLOT_SETMAX   40
 #define NETMAN_MAXPLAYERS    0x136     /* field: join accepted while players < this */
+#define DPLAY_MAX_PLAYERS    8         /* dwMaxPlayers the host gives DirectPlay (0x684254), host included */
 #define A_OBJ_NETWORKING     0xab83ac  /* IObjectNetworking*: vtable slots below, each BOOL __stdcall (this, obj) */
 #define OBJNET_IS_PROXY      0x1c      /* owned by another machine */
 #define OBJNET_HOSTED_HERE   0x20      /* owned by this machine */
