@@ -69,7 +69,7 @@ turn `recv_fix` off. Such a player's path deviation: p95 6.5 / max 7.7 units wit
 
 | Key | Default | What it does |
 |---|---|---|
-| `max_players` | 8 (0 in code) | Lets N players join: the host sets the engine's player cap to N+1 (Figgis's finding). At the stock cap the last player to join gets others kicked. Example: stock keeps 4, so a 4th joiner kicks two others. 0 = leave stock. At most 8 (higher values are clamped): the game's DirectPlay session holds 8, and a 9th player waits at "Joining Game..." forever without disturbing anyone. Only the host's value matters. Tested with 4, 5 and 8 players |
+| `max_players` | 8 (0 in code) | Lets N players join: the host sets the engine's player cap to N+1 (Figgis's finding). At the stock cap the last player to join gets others kicked. Example: stock's cap is 4, so 3 fit and a 4th joiner kicks two others. 0 = leave stock. At most 8 (higher values are clamped): the game's DirectPlay session holds 8, and a 9th player waits at "Joining Game..." forever without disturbing anyone. Only the host's value matters. Tested with 4, 5 and 8 players |
 
 ### 4. Environmental damage: `damage_fix`
 

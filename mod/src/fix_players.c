@@ -1,6 +1,6 @@
 /* max_players: the host's player cap. Figgis found it must be set to N+1 for N players (systemshock.org topic
- * 12190); at the stock cap the last joiner gets other players kicked (stock keeps 4: a 4th joiner kicks two).
- * Applied once, from the menu loop, as soon as the net manager exists. */
+ * 12190); at the stock cap the last joiner gets other players kicked (stock's cap is 4, so 3 fit and a 4th joiner
+ * kicks two). Applied once, from the menu loop, as soon as the net manager exists. */
 #include <windows.h>
 #include "engine.h"
 #include "common.h"
