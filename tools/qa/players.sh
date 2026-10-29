@@ -10,6 +10,7 @@
 set -uo pipefail
 test=${T2_TEST_DIR:-/mnt/d/thief_coop_test}
 cd "$(dirname "$0")"
+python3 -I lanes.py check_unlocked || exit 1
 n=${1:?usage: players.sh <N> [extra lane...]}; shift
 extra=("$@")
 maxp=${MAXP:-$n}
@@ -17,20 +18,27 @@ lanes=(host); for i in $(seq 1 $((n - 1))); do lanes+=("client$i"); done
 python3 -I lanes.py kill
 trap 'python3 -I lanes.py kill' EXIT
 setup=(); for l in "${lanes[@]}" "${extra[@]}"; do setup+=("$l:idle"); done
-MAXP=$maxp DAMAGE=0 python3 -I lanes.py setup stock "${setup[@]}" >/dev/null
-python3 -I lanes.py launch "${lanes[@]}" "${extra[@]}" >/dev/null
 free_mb() { powershell.exe -NoProfile -Command '[int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1KB)' | tr -d '\r'; }
-echo "free RAM with $((n + ${#extra[@]})) instances: $(free_mb) MB"
-python3 -I lanes.py host_lobby host >/dev/null
-python3 -I lanes.py join "${lanes[@]:1}" >/dev/null
-for l in "${extra[@]}"; do
-  python3 -I lanes.py join "$l" >/dev/null
-  python3 -I lanes.py shot "$l" "players${n}_$l"
+started=0
+for try in 1 2; do   # injected menu clicks are occasionally dropped (more often when RAM is short); start over once
+  python3 -I lanes.py kill
+  MAXP=$maxp DAMAGE=0 python3 -I lanes.py setup stock "${setup[@]}" >/dev/null
+  python3 -I lanes.py launch "${lanes[@]}" "${extra[@]}" >/dev/null
+  mb=$(free_mb)
+  echo "free RAM with $((n + ${#extra[@]})) instances: $mb MB"
+  python3 -I lanes.py host_lobby host >/dev/null
+  python3 -I lanes.py join "${lanes[@]:1}" >/dev/null
+  for l in "${extra[@]}"; do
+    python3 -I lanes.py join "$l" >/dev/null
+    python3 -I lanes.py shot "$l" "players${n}_$l"
+  done
+  python3 -I lanes.py shot host "players${n}_lobby"
+  sleep 2
+  python3 -I lanes.py start host >/dev/null
+  if python3 -I lanes.py wait_ingame "${lanes[@]}" 240; then started=1; break; fi
+  python3 -I lanes.py shot host "players${n}_fail$try"
 done
-python3 -I lanes.py shot host "players${n}_lobby"
-sleep 2
-python3 -I lanes.py start host >/dev/null
-python3 -I lanes.py wait_ingame "${lanes[@]}" 240 || { python3 -I lanes.py shot host "players${n}_fail"; echo "FAIL players=$n: not all in game"; exit 1; }
+[ $started = 1 ] || { echo "FAIL players=$n: not all in game (free RAM after launch: $mb MB; each instance needs ~480 MB)"; exit 1; }
 sleep 65
 echo "free RAM in mission: $(free_mb) MB"
 python3 -I lanes.py shot host "players${n}_mission"

@@ -8,7 +8,8 @@
   python3 -I lanes.py wait_ingame <lane>... [timeout_s]              until every lane has a local player
   python3 -I lanes.py start_session host client1...                 host a game, clients join, start mission 1
                                                                      (the same in steps: host_lobby host, join client1..., start host)
-  python3 -I lanes.py kill
+  python3 -I lanes.py check_unlocked                                 fail if the Windows session is locked
+  python3 -I lanes.py kill                                           stop the games started from the lanes
 """
 import os, shutil, subprocess, sys, time
 
@@ -56,7 +57,15 @@ def setup(mode, *lane_bots):
     print(f'setup {mode}: {lane_bots}')
 
 
+def check_unlocked(image='LogonUI.exe'):
+    """A locked Windows session can't present D3D frames: every live test would fail without saying why."""
+    out = subprocess.run(['tasklist.exe', '/FI', f'IMAGENAME eq {image}'], capture_output=True, text=True).stdout
+    if image.split('.')[0].lower() in out.lower():
+        sys.exit(f'Windows session is locked ({image} is running): unlock it before a live test')
+
+
 def launch(*lanes):
+    check_unlocked()
     for lane in lanes:
         subprocess.Popen([f'{TEST}/{lane}/Thief2MP.exe'], cwd=f'{TEST}/{lane}',
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -168,11 +177,20 @@ def start_session(host='host', *clients):
     start(host)
 
 
+def lane_pids():
+    """Thief2MP processes started from a lane folder; never a game the owner runs elsewhere."""
+    out = subprocess.run(['powershell.exe', '-NoProfile', '-Command',
+                          f"Get-Process Thief2MP -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{WIN_TEST}\\*' }} | "
+                          "Select-Object -ExpandProperty Id"], capture_output=True, text=True).stdout.split()
+    return [int(p) for p in out]
+
+
 def kill():
-    subprocess.run(['taskkill.exe', '/IM', 'Thief2MP.exe', '/F'], capture_output=True)
+    pids = lane_pids()
+    if pids:
+        subprocess.run(['taskkill.exe', '/F', *[a for p in pids for a in ('/PID', str(p))]], capture_output=True)
     for _ in range(40):
-        out = subprocess.run(['tasklist.exe', '/FI', 'IMAGENAME eq Thief2MP.exe'], capture_output=True, text=True).stdout
-        if 'Thief2MP' not in out:
+        if not lane_pids():
             break
         time.sleep(0.5)
     time.sleep(1)

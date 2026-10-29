@@ -2,7 +2,7 @@
 # Full regression on the current build. Prints one summary line per scenario and PASS/FAIL against the bars below.
 #   stock (control, the steer function not hooked): must show the bug    path_dev_max > 1.0
 #   fixed (localhost, 60/30/2, 150/75/10):        path_dev_max < 0.5, no frames > 1 unit off path, no jumps
-#   mixed (sender without T2MPFix; the observer's steer_fix):  path_dev_max < 4 (stock ~7.7)
+#   mixed (sender without T2MPFix; the observer's steer_fix):  path_dev_max < 4 (stock: p95 ~7, max 7.7-17.7)
 #   send_only / recv_only (one half of the avatar fix on both machines): each half works on its own
 #     send_only: sender at T2MPFix rate, receiver keeps stock steering    hb/s >= 10, fixed_frames == 0
 #     recv_only: stock-rate sender is never interpolated                   hb/s < 3, fixed_frames == 0
@@ -10,9 +10,11 @@
 set -uo pipefail
 test=${T2_TEST_DIR:-/mnt/d/thief_coop_test}
 cd "$(dirname "$0")"
+python3 -I lanes.py check_unlocked || exit 1
 sha=$(sha256sum ../../mod/build/dinput.dll | cut -c1-16)
 echo "build dinput.dll sha256 $sha"
 fail=0
+mkdir -p results; marker=$(mktemp -p results .regress_start.XXXXXX)   # crash dumps newer than this belong to this run
 check() { # name json condition
   python3 -I - "$1" "$2" "$3" <<'EOF' || fail=1
 import json, sys
@@ -50,5 +52,7 @@ for l in host client1; do cp $test/$l/T2MPFix_tel.csv "$out/${l}_tel.csv"; [ -f 
 python3 -I lanes.py kill
 python3 -I analyze.py "$out/client1_tel.csv" "$out/host_tel.csv" --json "$out/summary.json" >/dev/null
 check "mixed (mover without fix)" "$out/summary.json" "fixed_frames == 0 and path_dev_max < 4"
-grep -l CRASH results/*/ 2>/dev/null
+crashes=$(find results -name '*_crash.dmp' -newer "$marker"); rm -f "$marker"
+[ -n "$crashes" ] && echo "CRASH: $crashes" && fail=1
 [ $fail = 0 ] && echo "ALL PASS" || echo "SOME FAILED"
+exit $fail
