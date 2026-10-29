@@ -7,8 +7,8 @@ Four separate fixes for Thief II multiplayer, each with its own switch in `T2MPF
    vanishing).
 2. **Stock steering bug** (`steer_fix`): players that fix 1 doesn't cover (those without T2MPFix) no longer
    drift several units behind, caused by an uninitialized read in the engine's steering code.
-3. **Player limit** (`max_players`): as many players as you set can join, up to 8; stock's cap is off by one, so the
-   last player to join drops others. Example: a 4th player joining kicks two others.
+3. **Player limit** (`max_players`): up to 8 players can play (DirectPlay's limit) without anyone being dropped;
+   stock's cap is off by one, so the last player to join drops others. Example: a 4th player joining kicks two others.
 4. **Environmental damage** (`damage_fix`): hazards each game runs locally hurt players again; stock
    multiplayer drops their damage. Example: lava does nothing.
 
@@ -24,7 +24,7 @@ other exe it does nothing.
    https://github.com/Xanfre/T2Fix, tick "Thief 2 Multiplayer Beta"). Everyone must use the same version.
 2. Copy `dinput.dll` and `T2MPFix.ini` from the release zip into the game folder (next to `Thief2MP.exe`).
 3. Start `Thief2MP.exe` as usual. A `T2MPFix.log` file appears in the game folder; its first line
-   should say `T2MPFix 0.2 on Thief2MP 1.29`.
+   should say `T2MPFix 0.3 on Thief2MP 1.29`.
 
 Hosting and joining are unchanged: the host forwards port 5198 (5199 too for the global server) or
 everyone uses a LAN VPN.
@@ -45,7 +45,7 @@ the way), and only snaps it into place when it is 12 units off. The fix has two 
 
 | Key | Default | Half | What it does |
 |---|---|---|---|
-| `send_fix` | 1 | sending (`fix_send.c`) | While you move or turn, send your position 20 times a second (stock: about 1.3/s) |
+| `send_fix` | 1 | sending (`fix_send.c`) | While you move or turn, send your position every 50 ms (measured ~16/s; stock: about 1.3/s) |
 | `recv_fix` | 1 | receiving (`fix_recv.c`) | Buffer the received positions and place each player on their interpolated real path, about 0.1 s behind, with the engine's own teleport, instead of steering their body through local physics |
 | `send_interval_ms` | 50 | sending | Send interval while moving (receivers also use it as the expected gap) |
 | `delay_min_ms` / `delay_max_ms` | 60 / 300 | receiving | Bounds for the display delay (it adapts to your connection's jitter) |
@@ -53,7 +53,7 @@ the way), and only snaps it into place when it is 12 units off. The fix has two 
 The halves can be switched independently, but only work together. `recv_fix` only interpolates a player
 whose heartbeat rate proves they run `send_fix`; anyone else keeps the stock steering (see fix 2). `send_fix`
 alone doesn't help either: a receiver without `recv_fix` gets ~16 updates a second instead of ~1.3, but its stock
-steering still lags and sticks (measured: worse than stock, see Results).
+steering still lags and sticks (measured: no better than stock, see Results).
 
 ### 2. Stock steering bug: `steer_fix`
 
@@ -62,14 +62,14 @@ steering still lags and sticks (measured: worse than stock, see Results).
 | `steer_fix` | 1 | For a moving remote player, the engine's steering code decides whether to pull the avatar toward its predicted position by testing three stack values it never wrote. In the 1.29 MP exe the test fails, so the avatar only follows the predicted velocity and drifts behind (several units) until the 12-unit snap. This 6-byte patch (`fix_steer.c`) always pulls it toward the prediction. 0 = stock |
 
 It only matters for players that `recv_fix` doesn't interpolate: players without T2MPFix, or everyone if you
-turn `recv_fix` off. Such a player's path deviation: p95 6.5 / max 7.7 units with the stock code, 2.4 / 3.0 with
-`steer_fix`.
+turn `recv_fix` off. Such a player's path deviation: p95 6.9 / max 14.3 units with the stock code, 2.6 / 3.8 with
+`steer_fix` (see Results).
 
 ### 3. Player limit: `max_players`
 
 | Key | Default | What it does |
 |---|---|---|
-| `max_players` | 8 (0 in code) | Lets N players join: the host sets the engine's player cap to N+1 (Figgis's finding). At the stock cap the last player to join gets others kicked. Example: stock's cap is 4, so 3 fit and a 4th joiner kicks two others. 0 = leave stock. At most 8 (higher values are clamped): the game's DirectPlay session holds 8, and a 9th player waits at "Joining Game..." forever without disturbing anyone. Only the host's value matters. Tested with 4, 5 and 8 players |
+| `max_players` | 8 (0 in code) | Lets N players join: the host sets the engine's player cap to N+1 (Figgis's finding). At the stock cap the last player to join gets others kicked. Example: stock's cap is 4, so 3 fit and a 4th joiner kicks two others. 0 = leave stock. At most 8 (higher values are clamped): the game's DirectPlay session holds 8, and a 9th player waits at "Joining Game..." forever without disturbing anyone. **Keep 8**: N is not a limit that refuses players. With a smaller N, an (N+1)th player can still join and gets others kicked, as in stock (tested: `max_players=3`, a 4th joiner kicked two). Only the host's value matters. Tested with 3, 4, 5 and 8 players |
 
 ### 4. Environmental damage: `damage_fix`
 
@@ -107,26 +107,28 @@ Addresses, the derivation and all measurements: [docs/NOTES.md](docs/NOTES.md).
 ## Results
 
 Two real game instances on one PC on mission 1, one player driven by a movement bot (walk, run, jump, strafe,
-crouch, turn), the same session with each set of fixes (`tools/qa/regress.sh`, build `04d806c9…`, which differs
-from the 0.2 release only in the version string). path_dev =
-distance in Dark units of the shown avatar from the player's true path. "stock" is the real game: the steer
-function is not hooked (telemetry reads the ghost table instead).
+crouch, turn), the same session with each set of fixes (`tools/qa/regress.sh`, 2026-10-29, build `1f331f76…` =
+version 0.3). path_dev = distance in Dark units of the shown avatar from the player's true path; "off>1" = frames
+more than 1 unit off it. "stock" is the real game: the steer function is not hooked (telemetry reads the ghost
+table instead). Stock's max depends on a few snaps and varies from run to run (7.7, 17.7 and 14.3 in the last
+three runs); its p95 stays at 6.5–7.3.
 
 ```
-PASS stock localhost (control)    travelled  260.3  path_dev p95 6.481 max 7.652  off>1  3896  jumps 1  lag p50 3.04  hb/s 1.3  fixed 0/6519
-PASS fixed localhost              travelled  260.1  path_dev p95 0.003 max 0.127  off>1     0  jumps 0  lag p50 0.30  hb/s 16.5  fixed 6209/6527
-PASS fixed 60+-30ms 2% loss       travelled  259.8  path_dev p95 0.004 max 0.125  off>1     0  jumps 0  lag p50 0.62  hb/s 15.7  fixed 6182/6517
-PASS fixed 150+-75ms 10% loss     travelled  257.8  path_dev p95 0.013 max 0.236  off>1     0  jumps 0  lag p50 0.98  hb/s 11.6  fixed 6093/6503
-PASS send_fix only                travelled  259.8  path_dev p95 9.177 max 12.000  off>1  3482  jumps 2  lag p50 1.68  hb/s 16.5  fixed 0/6519
-PASS recv_fix only                travelled  259.7  path_dev p95 2.401 max 3.060  off>1  2668  jumps 0  lag p50 1.02  hb/s 1.3  fixed 0/6529
-PASS steer_fix only               travelled  257.1  path_dev p95 2.378 max 3.006  off>1  2702  jumps 1  lag p50 1.09  hb/s 1.4  fixed 0/6514
-PASS mixed (mover without fix)    travelled  257.3  path_dev p95 2.438 max 3.124  off>1  2667  jumps 1  lag p50 1.08  hb/s 1.3  fixed 0/6396
+PASS stock localhost (control)    travelled  287.7  path_dev p95 6.930 max 14.342  off>1  4407  jumps 1  lag p50 2.89  hb/s 1.3  fixed 0/7227
+PASS fixed localhost              travelled  286.5  path_dev p95 0.003 max 0.112  off>1     0  jumps 0  lag p50 0.30  hb/s 16.2  fixed 6811/7129
+PASS fixed 60+-30ms 2% loss       travelled  287.1  path_dev p95 0.003 max 0.138  off>1     0  jumps 0  lag p50 0.61  hb/s 15.5  fixed 6766/7096
+PASS fixed 150+-75ms 10% loss     travelled  285.1  path_dev p95 0.006 max 0.268  off>1     0  jumps 0  lag p50 0.96  hb/s 11.4  fixed 6709/7097
+PASS send_fix only                travelled  286.6  path_dev p95 7.778 max 10.086  off>1  4497  jumps 1  lag p50 2.51  hb/s 16.3  fixed 0/7108
+PASS recv_fix only                travelled  286.6  path_dev p95 2.615 max 3.480  off>1  3001  jumps 1  lag p50 1.14  hb/s 1.3  fixed 0/7114
+PASS steer_fix only               travelled  285.5  path_dev p95 2.639 max 3.836  off>1  2977  jumps 1  lag p50 1.12  hb/s 1.3  fixed 0/7114
+PASS mixed (mover without fix)    travelled  284.2  path_dev p95 2.575 max 3.546  off>1  2814  jumps 1  lag p50 1.09  hb/s 1.3  fixed 0/6869
 ALL PASS
 ```
 
 - "fixed" = all fixes on. "mixed": the mover has no T2MPFix; the observer's `steer_fix` handles them.
-- "send_fix only": a player with T2MPFix seen by a player without it is shown *worse* than stock (the stock
-  steering bug with more frequent updates). Everyone in the session should install T2MPFix.
+- "send_fix only": a player with T2MPFix seen by a player without it is shown no better than stock, usually a
+  bit worse (path_dev p95 7.8 vs 6.9 here, 9.2 vs 6.5 on 2026-10-28: the stock steering bug with more frequent
+  updates). Everyone in the session should install T2MPFix.
 - "recv_fix only": `steer_fix` is off, but the result matches it: the stock steering's uninitialized read
   happened to go the good way behind this build's hook. `steer_fix` makes that deterministic.
 
@@ -135,6 +137,8 @@ Each fix on its own, with every other fix off:
   ("Network Connection Lost!" while the host waits forever).
 - `max_players=5` and `=8`: 5 and 8 instances play mission 1, each seeing all the others every second for 60 s; a 9th
   instance stays at "Joining Game..." and drops no one, even with the clamp removed (`tools/qa/players.sh`).
+- `max_players=3`: 3 instances play; a 4th joining the lobby kicks Client1 and Client2 (the stock bug one player
+  later), so a smaller value is not a way to keep players out.
 - `damage_fix=1`: on Soulforge (mission 15) the player dies in the lava; with `damage_fix=0` they stand in it at
   full health (`tools/qa/lava.sh`).
 - With all fixes off (and QA off), nothing is hooked or patched; the game runs as stock.
@@ -145,6 +149,7 @@ Each fix on its own, with every other fix off:
   steering), ladders, rope arrows, mantling, swimming, saves/loads, mission changes, fan missions,
   a session over the Internet (network impairment was simulated in the DLL).
 - AI and other networked objects still use the stock ghost code.
+- NewDark's own MP limits stay: some missions have completion objectives only the host can do (its release notes).
 - Alt-tabbing still pauses that player's game, which stalls things like saving for everyone (stock behaviour).
 
 ## Build
@@ -154,7 +159,7 @@ Needs Docker (the compiler runs in a container; nothing is installed on the host
 ```sh
 tools/fetch_tools.sh        # pinned llvm-mingw 20261006 into tools_build/, SHA-256 checked
 tools/build.sh              # -> mod/build/dinput.dll
-tools/package.sh 0.2        # -> dist/T2MPFix-0.2.zip
+tools/package.sh 0.3        # -> dist/T2MPFix-0.3.zip
 ```
 
 The build is reproducible: the same source gives a byte-identical `dinput.dll` (no PE timestamp), so you

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pack the release zip: dist/T2MPFix-<version>.zip with T2MPFix/{dinput.dll,T2MPFix.ini,INSTALL.txt}.
-#   tools/package.sh 0.2
+#   tools/package.sh 0.3
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 ver=$1

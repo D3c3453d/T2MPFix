@@ -2,7 +2,7 @@ Four separate fixes for Thief 2 multiplayer (NewDark 1.29), each with its own sw
 
 | Fix | Switch | What it fixes |
 |---|---|---|
-| 1. Smooth remote players | `send_fix=1` and `recv_fix=1` | Other players' avatars lagging, sticking in walls and on door frames, floating or vanishing. `send_fix` sends your position 20×/s while you move; `recv_fix` shows the others on their real path |
+| 1. Smooth remote players | `send_fix=1` and `recv_fix=1` | Other players' avatars lagging, sticking in walls and on door frames, floating or vanishing. `send_fix` sends your position every 50 ms while you move; `recv_fix` shows the others on their real path |
 | 2. Stock steering bug | `steer_fix=1` | Players without T2MPFix drifting several units behind: the engine's steering tests uninitialized memory |
 | 3. Player limit | `max_players=8` | The last player to join drops others, because the engine's cap is off by one. Example: a 4th player joining kicks two others. Allows up to 8 (DirectPlay's limit) |
 | 4. Environmental damage | `damage_fix=1` | Hazards each game runs locally doing no damage in multiplayer. Example: lava |

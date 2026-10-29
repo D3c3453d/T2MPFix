@@ -6,6 +6,7 @@ T2MPFix for Thief II multiplayer (NewDark 1.29) - four separate fixes
 2. Stock steering bug (steer_fix=1): players without T2MPFix no longer drift several units behind.
 3. Player limit (max_players=8): up to 8 players can join (DirectPlay's limit); stock's cap is off by
    one, so the last player to join drops others. Example: a 4th player joining kicks two others.
+   Keep it at 8: a smaller value does not keep extra players out (an extra joiner still kicks others).
 4. Environmental damage (damage_fix=1): hazards each game runs locally hurt players again;
    stock multiplayer drops their damage. Example: lava does nothing.
 
@@ -19,7 +20,7 @@ Install (everyone in the session; a player without it is shown the stock way):
    "Thief 2 Multiplayer Beta" in the component list. Everyone must use the same version.
 2. Copy dinput.dll and T2MPFix.ini from this folder into the game folder, next to Thief2MP.exe.
 3. Start Thief2MP.exe. The game folder gets a T2MPFix.log; its first line should say
-   "T2MPFix 0.2 on Thief2MP 1.29". If it doesn't appear, the exe is not the 1.29 MP exe.
+   "T2MPFix 0.3 on Thief2MP 1.29". If it doesn't appear, the exe is not the 1.29 MP exe.
    On the first launch Windows offers to install DirectPlay: accept it, or multiplayer won't
    start. If you dismissed it, turn DirectPlay on by hand:
    a. Press Win+R, type  optionalfeatures  and press Enter. (Or open the Start menu, type

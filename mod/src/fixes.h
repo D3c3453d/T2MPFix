@@ -1,5 +1,5 @@
 /* The fixes are independent modules (fix_*.c), each switched by its own key in T2MPFix.ini:
- *   send_fix     send your position ~20x/s while moving          (fix_send.c)  } smooth remote players
+ *   send_fix     send your position every 50 ms while moving   (fix_send.c)  } smooth remote players
  *   recv_fix     show other players on their interpolated path   (fix_recv.c)  }
  *   steer_fix    stock steering without its uninitialized read   (fix_steer.c)  players not interpolated
  *   max_players  player cap N+1, so N players can join           (fix_players.c)
