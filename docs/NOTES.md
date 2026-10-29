@@ -107,27 +107,27 @@ walking the remote ghost hash `0x8c5a80` around the ghost frame instead.
 3. `max_players` (`fix_players.c`): `SetMaxPlayers(N+1)` once the net manager exists (below).
 4. `damage_fix` (`fix_damage.c`): the damage filter hook, see "Lava does no damage" below.
 
-## Test results (2026-10-29, version 0.3, build `dinput.dll` `1f331f76…`)
+## Test results (2026-10-29, version 0.3, build `dinput.dll` `817cbee6…`)
 
 Build: reproducible (two clean builds byte-identical). Against `070f9688…` (the 8-player tests below) the DLL source
-differs only in the version string and comments. Host tests: `make -C mod test` and `tools/qa/test_analyze.py` pass.
+differs only in the version string, comments and the QA-only `place` command (unused unless QA is on). Host tests: `make -C mod test` and `tools/qa/test_analyze.py` pass.
 
 `tools/qa/regress.sh`, ALL PASS, exit 0 (mission 1, 70 s per scenario):
 
 ```
-PASS stock localhost (control)    travelled  287.7  path_dev p95 6.930 max 14.342  off>1  4407  jumps 1  lag p50 2.89  hb/s 1.3  fixed 0/7227
-PASS fixed localhost              travelled  286.5  path_dev p95 0.003 max 0.112  off>1     0  jumps 0  lag p50 0.30  hb/s 16.2  fixed 6811/7129
-PASS fixed 60+-30ms 2% loss       travelled  287.1  path_dev p95 0.003 max 0.138  off>1     0  jumps 0  lag p50 0.61  hb/s 15.5  fixed 6766/7096
-PASS fixed 150+-75ms 10% loss     travelled  285.1  path_dev p95 0.006 max 0.268  off>1     0  jumps 0  lag p50 0.96  hb/s 11.4  fixed 6709/7097
-PASS send_fix only                travelled  286.6  path_dev p95 7.778 max 10.086  off>1  4497  jumps 1  lag p50 2.51  hb/s 16.3  fixed 0/7108
-PASS recv_fix only                travelled  286.6  path_dev p95 2.615 max 3.480  off>1  3001  jumps 1  lag p50 1.14  hb/s 1.3  fixed 0/7114
-PASS steer_fix only               travelled  285.5  path_dev p95 2.639 max 3.836  off>1  2977  jumps 1  lag p50 1.12  hb/s 1.3  fixed 0/7114
-PASS mixed (mover without fix)    travelled  284.2  path_dev p95 2.575 max 3.546  off>1  2814  jumps 1  lag p50 1.09  hb/s 1.3  fixed 0/6869
+PASS stock localhost (control)    travelled  285.8  path_dev p95 7.052 max 14.870  off>1  4346  jumps 2  lag p50 3.03  hb/s 1.3  fixed 0/7119
+PASS fixed localhost              travelled  286.1  path_dev p95 0.003 max 0.134  off>1     0  jumps 0  lag p50 0.30  hb/s 16.4  fixed 6802/7120
+PASS fixed 60+-30ms 2% loss       travelled  285.2  path_dev p95 0.005 max 0.209  off>1     0  jumps 0  lag p50 0.61  hb/s 15.6  fixed 6780/7112
+PASS fixed 150+-75ms 10% loss     travelled  285.2  path_dev p95 0.006 max 0.245  off>1     0  jumps 0  lag p50 0.98  hb/s 11.4  fixed 6710/7100
+PASS send_fix only                travelled  287.0  path_dev p95 9.764 max 11.877  off>1  4154  jumps 2  lag p50 2.13  hb/s 16.4  fixed 0/7119
+PASS recv_fix only                travelled  285.9  path_dev p95 2.676 max 3.658  off>1  2996  jumps 1  lag p50 1.13  hb/s 1.3  fixed 0/7122
+PASS steer_fix only               travelled  286.7  path_dev p95 2.626 max 3.509  off>1  2981  jumps 1  lag p50 1.12  hb/s 1.3  fixed 0/7126
+PASS mixed (mover without fix)    travelled  284.3  path_dev p95 2.578 max 3.424  off>1  2816  jumps 1  lag p50 1.09  hb/s 1.3  fixed 0/6891
 ALL PASS
 ```
 
-- Stock's max depends on a few snaps and varies between runs: 7.65 (2026-10-28), 17.66 and 14.34 (2026-10-29); p95
-  6.5–7.3. send_fix only stays no better than stock, usually a bit worse (p95 7.8 vs 6.9 here).
+- Stock's max depends on a few snaps and varies between runs: 7.65 (2026-10-28), 17.66, 14.34 and 14.87 (2026-10-29); p95
+  6.5–7.3. send_fix only stays no better than stock, usually a bit worse (p95 9.8 vs 7.1 here).
 - Scorer self-check: the same scorer with an impossible bar prints FAIL and exits 1; a crash dump written during the
   run also fails it; with the real bars it exits 0.
 - `MAXP=8 players.sh 4` PASS (twice): cap 4 -> 9, each lane sees exactly 3 remote players in every second of 60 s.
@@ -144,8 +144,10 @@ ALL PASS
   front of the lava), not in it; reruns PASS. The walk missed in 4 of 10 attempts. The script now checks the
   player's last telemetry position (in the trough around (80, 29, -4.8), rim positions have z 1.5–3.0), retries up
   to 3 times and fails as a setup error. Without that check a `damage_fix=0` run on the rim would have been a hollow
-  PASS. Final: `lava.sh 1` PASS (in the lava, damage applied 3 times), `lava.sh 0` PASS after one rim miss (in the
-  lava, damage_fix off, nothing applied).
+  PASS. Then the walk was replaced by a QA command, `place x y z` (`obj_pos_update` on the local player, keeping its
+  facing): `lava.sh` places the player at (80, 29, -4) and still checks the position. Build `817cbee6…`: `lava.sh 1`
+  PASS (at 80.0 29.0 -5.6, damage applied 3 times, dies), `lava.sh 0` PASS (at 80.0 29.0 -3.9, standing in the lava
+  at full health), first try each.
 - Harness: `lanes.py kill` now stops only lane processes (no Thief2MP left after any run); suites refuse a locked
   session (`check_unlocked`, also checked with a process name that is running: exit 1 with the reason).
 

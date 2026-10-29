@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# damage_fix check: the host alone on Soulforge (mission 15) walks into the lava trough next to the start.
+# damage_fix check: the host alone on Soulforge (mission 15) is placed in the lava trough next to the start.
 #   lava.sh <damage_fix 0|1>
 # Only damage_fix differs from stock (send_fix/recv_fix off, max_players=0), so this checks that fix on its own.
-# Precondition for both: telemetry puts the player in the trough at the end (else retry, then FAIL as setup).
+# Precondition for both: telemetry puts the player in the trough at the end (else FAIL as a setup error).
 # PASS with 1: T2MPFix.log shows local-only damage applied (and the screenshot shows the player dying).
 # PASS with 0: the fix is logged off, no damage is applied (stock: lava does nothing in multiplayer).
 # Temporarily sets starting_mission 15 in the host lane's USER.CFG and restores it afterwards.
@@ -26,8 +26,6 @@ print(f'player at {x:.1f} {y:.1f} {z:.1f}: {"in the lava" if inside else "NOT in
 sys.exit(0 if inside else 1)
 PY
 }
-for attempt in 1 2 3; do   # the walk is timed key presses (it missed the trough in 4 of 10 tries); start over
-python3 -I lanes.py kill
 DAMAGE=$dmg MAXP=0 python3 -I lanes.py setup stock host:idle >/dev/null
 python3 -I lanes.py launch host >/dev/null
 python3 -I lanes.py unfocus >/dev/null
@@ -38,13 +36,9 @@ for _ in $(seq 1 30); do
   [ "${s:-0}" -gt 3000 ] 2>/dev/null && break
   sleep 2
 done
-# from the start: to the lava trough, then jump in
-python3 -I lanes.py qa host "cmd bind forward 2; wait 7000; cmd bind forward 0; cmd bind turn 1; wait 900; cmd bind turn 0; cmd bind turn -1; wait 350; cmd bind turn 0; cmd bind forward 2; wait 2500; cmd bind forward 0; cmd bind turn 1; wait 350; cmd bind turn 0; cmd bind forward 2; wait 1800; cmd bind forward 0; cmd bind turn -1; wait 600; cmd bind turn 0; cmd bind forward 2; wait 1200; cmd bind forward 0; cmd bind sidestep 1; wait 700; cmd bind sidestep 0; cmd bind turn 1; wait 800; cmd bind turn 0; status" >/dev/null
-python3 -I lanes.py qa host "cmd bind forward 2; wait 200; cmd bind jump; wait 900; cmd bind forward 0; cmd bind turn -1; wait 120; cmd bind turn 0; cmd bind forward 2; wait 1500; cmd bind forward 0; wait 500; cmd bind forward 2; wait 150; cmd bind jump; wait 700; cmd bind forward 0; wait 4000; status" >/dev/null
+python3 -I lanes.py qa host "place 80 29 -4; wait 5000; status" >/dev/null   # into the trough next to the start
 python3 -I lanes.py shot host "lava_damage_fix$dmg"
-in_lava && break
-[ $attempt = 3 ] && { echo "FAIL lava damage_fix=$dmg: the player never reached the lava (test setup, not the fix)"; exit 1; }
-done
+in_lava || { echo "FAIL lava damage_fix=$dmg: the player is not in the lava (test setup, not the fix)"; exit 1; }
 grep -E "damage_fix|active:" "$H/T2MPFix.log" | cut -c14-
 n=$(grep -c "local-only damage to obj" "$H/T2MPFix.log")
 if [ "$dmg" = 1 ]; then ok=$([ "$n" -gt 0 ] && echo 1 || echo 0); else ok=$([ "$n" -eq 0 ] && grep -q "damage_fix: off" "$H/T2MPFix.log" && echo 1 || echo 0); fi

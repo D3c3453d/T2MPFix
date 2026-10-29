@@ -62,7 +62,7 @@ steering still lags and sticks (measured: no better than stock, see Results).
 | `steer_fix` | 1 | For a moving remote player, the engine's steering code decides whether to pull the avatar toward its predicted position by testing three stack values it never wrote. In the 1.29 MP exe the test fails, so the avatar only follows the predicted velocity and drifts behind (several units) until the 12-unit snap. This 6-byte patch (`fix_steer.c`) always pulls it toward the prediction. 0 = stock |
 
 It only matters for players that `recv_fix` doesn't interpolate: players without T2MPFix, or everyone if you
-turn `recv_fix` off. Such a player's path deviation: p95 6.9 / max 14.3 units with the stock code, 2.6 / 3.8 with
+turn `recv_fix` off. Such a player's path deviation: p95 7.1 / max 14.9 units with the stock code, 2.6 / 3.5 with
 `steer_fix` (see Results).
 
 ### 3. Player limit: `max_players`
@@ -107,27 +107,27 @@ Addresses, the derivation and all measurements: [docs/NOTES.md](docs/NOTES.md).
 ## Results
 
 Two real game instances on one PC on mission 1, one player driven by a movement bot (walk, run, jump, strafe,
-crouch, turn), the same session with each set of fixes (`tools/qa/regress.sh`, 2026-10-29, build `1f331f76…` =
+crouch, turn), the same session with each set of fixes (`tools/qa/regress.sh`, 2026-10-29, build `817cbee6…` =
 version 0.3). path_dev = distance in Dark units of the shown avatar from the player's true path; "off>1" = frames
 more than 1 unit off it. "stock" is the real game: the steer function is not hooked (telemetry reads the ghost
-table instead). Stock's max depends on a few snaps and varies from run to run (7.7, 17.7 and 14.3 in the last
-three runs); its p95 stays at 6.5–7.3.
+table instead). Stock's max depends on a few snaps and varies from run to run (7.7, 17.7, 14.3 and 14.9 in the
+last four runs); its p95 stays at 6.5–7.3.
 
 ```
-PASS stock localhost (control)    travelled  287.7  path_dev p95 6.930 max 14.342  off>1  4407  jumps 1  lag p50 2.89  hb/s 1.3  fixed 0/7227
-PASS fixed localhost              travelled  286.5  path_dev p95 0.003 max 0.112  off>1     0  jumps 0  lag p50 0.30  hb/s 16.2  fixed 6811/7129
-PASS fixed 60+-30ms 2% loss       travelled  287.1  path_dev p95 0.003 max 0.138  off>1     0  jumps 0  lag p50 0.61  hb/s 15.5  fixed 6766/7096
-PASS fixed 150+-75ms 10% loss     travelled  285.1  path_dev p95 0.006 max 0.268  off>1     0  jumps 0  lag p50 0.96  hb/s 11.4  fixed 6709/7097
-PASS send_fix only                travelled  286.6  path_dev p95 7.778 max 10.086  off>1  4497  jumps 1  lag p50 2.51  hb/s 16.3  fixed 0/7108
-PASS recv_fix only                travelled  286.6  path_dev p95 2.615 max 3.480  off>1  3001  jumps 1  lag p50 1.14  hb/s 1.3  fixed 0/7114
-PASS steer_fix only               travelled  285.5  path_dev p95 2.639 max 3.836  off>1  2977  jumps 1  lag p50 1.12  hb/s 1.3  fixed 0/7114
-PASS mixed (mover without fix)    travelled  284.2  path_dev p95 2.575 max 3.546  off>1  2814  jumps 1  lag p50 1.09  hb/s 1.3  fixed 0/6869
+PASS stock localhost (control)    travelled  285.8  path_dev p95 7.052 max 14.870  off>1  4346  jumps 2  lag p50 3.03  hb/s 1.3  fixed 0/7119
+PASS fixed localhost              travelled  286.1  path_dev p95 0.003 max 0.134  off>1     0  jumps 0  lag p50 0.30  hb/s 16.4  fixed 6802/7120
+PASS fixed 60+-30ms 2% loss       travelled  285.2  path_dev p95 0.005 max 0.209  off>1     0  jumps 0  lag p50 0.61  hb/s 15.6  fixed 6780/7112
+PASS fixed 150+-75ms 10% loss     travelled  285.2  path_dev p95 0.006 max 0.245  off>1     0  jumps 0  lag p50 0.98  hb/s 11.4  fixed 6710/7100
+PASS send_fix only                travelled  287.0  path_dev p95 9.764 max 11.877  off>1  4154  jumps 2  lag p50 2.13  hb/s 16.4  fixed 0/7119
+PASS recv_fix only                travelled  285.9  path_dev p95 2.676 max 3.658  off>1  2996  jumps 1  lag p50 1.13  hb/s 1.3  fixed 0/7122
+PASS steer_fix only               travelled  286.7  path_dev p95 2.626 max 3.509  off>1  2981  jumps 1  lag p50 1.12  hb/s 1.3  fixed 0/7126
+PASS mixed (mover without fix)    travelled  284.3  path_dev p95 2.578 max 3.424  off>1  2816  jumps 1  lag p50 1.09  hb/s 1.3  fixed 0/6891
 ALL PASS
 ```
 
 - "fixed" = all fixes on. "mixed": the mover has no T2MPFix; the observer's `steer_fix` handles them.
 - "send_fix only": a player with T2MPFix seen by a player without it is shown no better than stock, usually a
-  bit worse (path_dev p95 7.8 vs 6.9 here, 9.2 vs 6.5 on 2026-10-28: the stock steering bug with more frequent
+  bit worse (path_dev p95 9.8 vs 7.1 here, 9.2 vs 6.5 on 2026-10-28: the stock steering bug with more frequent
   updates). Everyone in the session should install T2MPFix.
 - "recv_fix only": `steer_fix` is off, but the result matches it: the stock steering's uninitialized read
   happened to go the good way behind this build's hook. `steer_fix` makes that deterministic.
@@ -175,7 +175,8 @@ check it and publish it.
 
 - `make -C mod test`: unit tests for the interpolation, the damage rule and the hook selection (host gcc).
 - `python3 -I tools/qa/test_analyze.py`: self-test of the path-deviation metric.
-- `tools/qa/lava.sh <0|1>`: `damage_fix` on Soulforge's lava (host alone, needs the host lane).
+- `tools/qa/lava.sh <0|1>`: `damage_fix` on Soulforge's lava (host alone, needs the host lane; the QA command
+  `place x y z` puts the player in the lava, telemetry confirms it).
 - `tools/qa/regress.sh`: the A/B table above, with real games on one Windows PC driven from WSL
   (~25 min, needs an unlocked desktop). Set up the lanes first: put a copy of a clean Thief 2 install in
   `local/vanilla/` and the zips from `t2_v129.zip` in `downloads/nd129/`, then

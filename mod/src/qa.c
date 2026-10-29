@@ -4,6 +4,7 @@
  *   move x y       move the UI cursor
  *   cmd <text>     run an engine command (e.g. "+walk", "quit_game")
  *   wait <ms>      pause the queue
+ *   place x y z    put the local player there, keeping its facing (no "does it fit" check)
  *   restore        un-minimize the game window without activating it
  *   status         write qa_status.txt
  * Mouse input is injected at the engine's mouse event queue (FUN_00689480, the Looking Glass
@@ -68,6 +69,7 @@ static void write_status(void)
 static void run(const char *c)
 {
     int x, y, ms;
+    float p[3];
     logf_("qa: %s", c);
     if (g_tel) fprintf(g_tel, "M,%.3f,%u,qa %s\n", now_ms(), sim_ms(), c);
     if (sscanf(c, "click %d %d", &x, &y) == 2) {
@@ -78,6 +80,15 @@ static void run(const char *c)
         mouse_event_(x, y, ME_MOTION, 0);
     } else if (sscanf(c, "wait %d", &ms) == 1) {
         wait_until = now_ms() + ms;
+    } else if (sscanf(c, "place %f %f %f", &p[0], &p[1], &p[2]) == 3) {
+        int obj = qa_local_player();
+        int16_t *fac = obj ? obj_facing(obj) : NULL;
+        if (fac) {
+            int16_t keep[3] = { fac[0], fac[1], fac[2] };
+            obj_pos_update(obj, p, keep);
+        } else {
+            logf_("qa: place: no local player");
+        }
     } else if (strncmp(c, "cmd ", 4) == 0) {
         run_verb(c + 4);
     } else if (strcmp(c, "restore") == 0) {
