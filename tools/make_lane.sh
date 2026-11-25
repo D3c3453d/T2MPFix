@@ -7,7 +7,7 @@ set -euo pipefail
 lane="$1"; pname="${2:-$1}"
 root=$(cd "$(dirname "$0")/.." && pwd)
 ws=$(cd "${T2_WORKSPACE:-$root/../..}" && pwd)
-test="${T2_TEST_DIR:-/mnt/d/thief_coop_test}"   # Windows folder for the test lanes, as a WSL path
+test="${T2_TEST_DIR:?set T2_TEST_DIR to the Windows folder that holds the test lanes, as a WSL path}"
 dst="$test/$lane"
 mkdir -p "$test"
 win=$(wslpath -w "$test")\\$lane

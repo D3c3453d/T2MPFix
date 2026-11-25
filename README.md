@@ -180,9 +180,10 @@ check it and publish it.
 - `tools/qa/regress.sh`: the A/B table above, with real games on one Windows PC driven from WSL
   (~25 min, needs an unlocked desktop). Set up the lanes first: put a copy of a clean Thief 2 install in
   `local/vanilla/` and the zips from `t2_v129.zip` in `downloads/nd129/`, then
-  `tools/make_lane.sh host` and `tools/make_lane.sh client1` (lanes go to `$T2_TEST_DIR`, default
-  `/mnt/d/thief_coop_test`). The DLL's QA mode (`[qa]` in the ini, see `mod/src/qa.c`) drives the menus
-  and the bots; the game windows must not be the foreground window while it runs.
+  `tools/make_lane.sh host` and `tools/make_lane.sh client1` (lanes go to `$T2_TEST_DIR`, which
+  must be set: a folder on a Windows drive, as a WSL path, e.g. `/mnt/c/thief_coop_test`). The DLL's QA mode
+  (`[qa]` in the ini, see `mod/src/qa.c`) drives the menus and the bots; the game windows must not be the
+  foreground window while it runs.
 - `tools/decompile.sh <Thief2MP.exe>` (after `tools/fetch_tools.sh ghidra`): the Ghidra decompile the
   addresses in `mod/src/engine.h` come from. Keep its output local.
 

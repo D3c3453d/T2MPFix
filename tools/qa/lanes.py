@@ -14,7 +14,9 @@
 import os, shutil, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-TEST = os.environ.get('T2_TEST_DIR', '/mnt/d/thief_coop_test')   # Windows folder with the lanes, as a WSL path
+TEST = os.environ.get('T2_TEST_DIR')   # Windows folder with the lanes, as a WSL path
+if not TEST:
+    sys.exit('set T2_TEST_DIR to the Windows folder that holds the test lanes, as a WSL path')
 WIN_TEST = subprocess.run(['wslpath', '-w', TEST], capture_output=True, text=True).stdout.strip()
 PLACE = {'host': (0, 0), 'client1': (1020, 0), 'client2': (0, 640), 'client3': (1020, 640)}
 MODES = {'stock': (0, 0, 0), 'fixed': (1, 1, 1), 'send_only': (1, 0, 0), 'recv_only': (0, 1, 0), 'steer_only': (0, 0, 1)}  # send, recv, steer

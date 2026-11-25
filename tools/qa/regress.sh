@@ -8,7 +8,7 @@
 #     recv_only: stock-rate sender is never interpolated                   hb/s < 3, fixed_frames == 0
 #   steer_only: the stock sender's avatar is pulled toward the prediction   path_dev_max < 4, fixed_frames == 0
 set -uo pipefail
-test=${T2_TEST_DIR:-/mnt/d/thief_coop_test}
+test=${T2_TEST_DIR:?set T2_TEST_DIR to the Windows folder that holds the test lanes, as a WSL path}
 cd "$(dirname "$0")"
 python3 -I lanes.py check_unlocked || exit 1
 sha=$(sha256sum ../../mod/build/dinput.dll | cut -c1-16)

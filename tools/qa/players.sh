@@ -8,7 +8,7 @@
 # Needs lanes host, client1..client(N-1) and the extras (tools/make_lane.sh, about 1 GB each) and N+extras instances'
 # worth of RAM.
 set -uo pipefail
-test=${T2_TEST_DIR:-/mnt/d/thief_coop_test}
+test=${T2_TEST_DIR:?set T2_TEST_DIR to the Windows folder that holds the test lanes, as a WSL path}
 cd "$(dirname "$0")"
 python3 -I lanes.py check_unlocked || exit 1
 n=${1:?usage: players.sh <N> [extra lane...]}; shift

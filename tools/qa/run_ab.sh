@@ -3,7 +3,7 @@
 #   run_ab.sh <seconds> <mode>...       modes: stock fixed send_only recv_only steer_only
 # Results: tools/qa/results/<stamp>_<mode>/{host,client1}_tel.csv and summary.json
 set -uo pipefail
-test=${T2_TEST_DIR:-/mnt/d/thief_coop_test}
+test=${T2_TEST_DIR:?set T2_TEST_DIR to the Windows folder that holds the test lanes, as a WSL path}
 cd "$(dirname "$0")"
 secs=$1; shift
 mover=${MOVER:-client1}   # which lane runs the walker bot

@@ -7,7 +7,7 @@
 # PASS with 0: the fix is logged off, no damage is applied (stock: lava does nothing in multiplayer).
 # Temporarily sets starting_mission 15 in the host lane's USER.CFG and restores it afterwards.
 set -uo pipefail
-test=${T2_TEST_DIR:-/mnt/d/thief_coop_test}
+test=${T2_TEST_DIR:?set T2_TEST_DIR to the Windows folder that holds the test lanes, as a WSL path}
 cd "$(dirname "$0")"
 python3 -I lanes.py check_unlocked || exit 1
 dmg=${1:?usage: lava.sh <damage_fix 0|1>}

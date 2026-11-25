@@ -1,5 +1,5 @@
 # Screenshot every visible window of the given process name (default Thief2MP) to <outdir>\<pid>.png
-param([string]$Proc = "Thief2MP", [string]$OutDir = "D:\thief_coop_test\shots")
+param([string]$Proc = "Thief2MP", [string]$OutDir = "$PSScriptRoot\shots")
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
 using System; using System.Runtime.InteropServices;
